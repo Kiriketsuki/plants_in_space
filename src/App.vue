@@ -135,17 +135,16 @@
                 const Z_VARIANCE = 1;
 
                 const growthConfig = {
-                    10: "root",
-                    15: "stalk",
+                    15: "root",
+                    23: "stalk",
                     40: "branch",
-                    45: "root",
                     200: "branch",
-                    // 400: "branch"
                 };
+                const cameraInfluence = 0.1;
 
+                let firstFork = -1;
                 function calculateTargetPosition(parentNode, type, camera) {
                     let targetX, targetY, targetZ;
-
                     switch (type) {
                         case "root":
                             // Calculate camera direction influence for roots
@@ -160,7 +159,6 @@
                             const randomAngle = Math.random() * 2 * Math.PI;
                             const cameraAngle = Math.atan2(normalizedCameraDirZ, normalizedCameraDirX);
 
-                            const cameraInfluence = 1;
                             const varianceScale = 1 - cameraInfluence;
                             const baseVariance = ((Math.random() * 2 * 360) / MAX_STALK_BRANCHES - 360 / MAX_STALK_BRANCHES) * (Math.PI / 180);
                             const variance = baseVariance * varianceScale;
@@ -173,9 +171,16 @@
                             targetX = parentNode.x + Math.cos(blendedAngle) * X_VARIANCE;
                             targetZ = parentNode.z + Math.sin(blendedAngle) * Z_VARIANCE;
                             break;
-
                         case "stalk":
                             targetY = parentNode.y + 1;
+
+                            if (parentNode.height === 3) {
+                                // For height 3 stalks, grow in a specific direction
+                                targetX = parentNode.x - 1 * firstFork;
+                                targetZ = parentNode.z + 1 * firstFork;
+                                firstFork = firstFork * -1;
+                                break;
+                            }
                             targetX = parentNode.x + (Math.random() * 2 - 1) * (X_VARIANCE * 0.5);
                             targetZ = parentNode.z + (Math.random() * 2 - 1) * (Z_VARIANCE * 0.5);
                             break;
@@ -190,8 +195,9 @@
                                 const angle = branchIndex * anglePerBranch * (Math.PI / 180) + startAngle;
 
                                 const baseRadius = 1.0;
-                                const heightScale = 0.1;
-                                const radius = baseRadius - parentNode.height * heightScale;
+                                const heightScale = 0.95;
+                                const radius = heightScale ** parentNode.height * baseRadius;
+                                // const radius = baseRadius - parentNode.height * heightScale;
 
                                 targetX = parentNode.x + radius * Math.cos(angle);
                                 targetZ = parentNode.z + radius * Math.sin(angle);
@@ -214,8 +220,6 @@
                                         let currentAngle = Math.atan2(dirZ, dirX);
                                         let cameraAngle = Math.atan2(normalizedCameraDirZ, normalizedCameraDirX);
 
-                                        const cameraInfluence = 1;
-
                                         // Scale variance based on camera influence
                                         const varianceScale = 1 - cameraInfluence;
                                         const baseVariance = ((Math.random() * 2 * 360) / MAX_STALK_BRANCHES - 360 / MAX_STALK_BRANCHES) * (Math.PI / 180);
@@ -225,8 +229,9 @@
                                         const blendedAngle = currentAngle * (1 - cameraInfluence) + cameraAngle * cameraInfluence + variance;
 
                                         const baseLength = 1.0;
-                                        const heightScale = 0.1;
-                                        const growthLength = baseLength - stalkParent.height * heightScale;
+                                        const heightScale = 0.95;
+                                        // const growthLength = baseLength - stalkParent.height * heightScale;
+                                        const growthLength = heightScale ** stalkParent.height * baseLength;
 
                                         targetX = parentNode.x + Math.cos(blendedAngle) * growthLength;
                                         targetZ = parentNode.z + Math.sin(blendedAngle) * growthLength;
@@ -608,15 +613,43 @@
                     // Final fallback if neither is possible (shouldn't happen often)
                     return "stalk";
                 }
+                // Add this variable outside the findParentNode function to track the last used fork
+                let lastUsedForkIndex = 0;
 
                 function findParentNode(type) {
                     switch (type) {
                         case "root":
                             return findAvailableRootParent();
+
                         case "stalk":
+                            const currentStalks = nodes.stalk;
+                            // Special handling for height 3 stalks
+                            const height3Stalks = currentStalks.filter((node) => node.height === 3 && countChildrenOfType(node, ["stalk"]) < 2);
+
+                            if (height3Stalks.length > 0) {
+                                // Return a height 3 stalk that doesn't have 2 stalk children yet
+                                return height3Stalks[0];
+                            }
+
+                            // Get all leaf stalks (stalks with no stalk children)
+                            const leafStalks = currentStalks.filter((node) => countChildrenOfType(node, ["stalk"]) === 0);
+
+                            // If we have leaf stalks, alternate between them
+                            if (leafStalks.length > 0) {
+                                // Sort leaf stalks by their creation order to maintain consistent alternation
+                                leafStalks.sort((a, b) => currentStalks.indexOf(a) - currentStalks.indexOf(b));
+
+                                // Alternate between available leaf stalks
+                                lastUsedForkIndex = (lastUsedForkIndex + 1) % leafStalks.length;
+                                return leafStalks[lastUsedForkIndex];
+                            }
+
+                            // Default behavior if no other conditions met
                             return nodes.stalk[nodes.stalk.length - 1] || nodes.seed[0];
+
                         case "branch":
                             return findAvailableBranchParent();
+
                         default:
                             return null;
                     }
