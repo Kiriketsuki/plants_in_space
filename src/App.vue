@@ -98,9 +98,11 @@
                 scene.add(sceneLight);
 
                 const gridHelper = new THREE.GridHelper(10, 10);
+                const gridHelperMaterial = new THREE.LineBasicMaterial({ color: 0x0000ff, opacity: 0.2, transparent: true });
+                gridHelper.material = gridHelperMaterial;
                 scene.add(gridHelper);
 
-                camera.position.set(5, 0, 5);
+                camera.position.set(10, 0, 10);
                 camera.lookAt(0, 0, 0);
 
                 const nodeGeometry = new THREE.SphereGeometry(0.1);
@@ -109,7 +111,8 @@
                     seed: 0x8b4513, // Brown
                     root: 0x4b2b15, // Darker Brown
                     stalk: 0x8b4513, // Brown
-                    branch: 0x654321, // Saddle Brown
+                    branch: 0x228b22, // Forest Green
+                    // branch: 0x654321, // Saddle Brown
                 };
 
                 const nodes = {
@@ -127,7 +130,7 @@
                 const MAX_ROOT_DEPTH = 4;
                 const MAX_BRANCH_LENGTH = 3;
                 const MAX_CHILDREN = 2;
-                const MAX_STALK_BRANCHES = 5;
+                const MAX_STALK_BRANCHES = 3;
                 const X_VARIANCE = 1;
                 const Z_VARIANCE = 1;
 
@@ -137,16 +140,38 @@
                     40: "branch",
                     45: "root",
                     200: "branch",
+                    // 400: "branch"
                 };
 
-                function calculateTargetPosition(parentNode, type) {
+                function calculateTargetPosition(parentNode, type, camera) {
                     let targetX, targetY, targetZ;
 
                     switch (type) {
                         case "root":
+                            // Calculate camera direction influence for roots
+                            const cameraDirX = camera.position.x - parentNode.x;
+                            const cameraDirZ = camera.position.z - parentNode.z;
+                            const cameraDist = Math.sqrt(cameraDirX * cameraDirX + cameraDirZ * cameraDirZ);
+
+                            const normalizedCameraDirX = cameraDirX / cameraDist;
+                            const normalizedCameraDirZ = cameraDirZ / cameraDist;
+
+                            // Calculate current downward angle (for roots this is a random direction)
+                            const randomAngle = Math.random() * 2 * Math.PI;
+                            const cameraAngle = Math.atan2(normalizedCameraDirZ, normalizedCameraDirX);
+
+                            const cameraInfluence = 1;
+                            const varianceScale = 1 - cameraInfluence;
+                            const baseVariance = ((Math.random() * 2 * 360) / MAX_STALK_BRANCHES - 360 / MAX_STALK_BRANCHES) * (Math.PI / 180);
+                            const variance = baseVariance * varianceScale;
+
+                            // Blend random angle with camera direction
+                            const blendedAngle = randomAngle * (1 - cameraInfluence) + cameraAngle * cameraInfluence + variance;
+
+                            // Apply the direction with X_VARIANCE as the growth length
                             targetY = parentNode.y - 1;
-                            targetX = parentNode.x + (Math.random() * 2 - 1) * X_VARIANCE;
-                            targetZ = parentNode.z + (Math.random() * 2 - 1) * Z_VARIANCE;
+                            targetX = parentNode.x + Math.cos(blendedAngle) * X_VARIANCE;
+                            targetZ = parentNode.z + Math.sin(blendedAngle) * Z_VARIANCE;
                             break;
 
                         case "stalk":
@@ -156,56 +181,60 @@
                             break;
 
                         case "branch":
-                            // Determine if this branch is coming from a stalk or another branch
                             if (parentNode.type === "stalk") {
-                                // For branches directly from stalk, calculate radial position
+                                // Original stalk branch logic remains the same
                                 const branchIndex = parentNode.children.length;
-                                const anglePerBranch = 72; // Degrees between each branch
-                                const heightRotation = parentNode.height * 30; // Rotate 30 degrees per height unit
-                                const startAngle = heightRotation * (Math.PI / 180); // Convert height rotation to radians
-                                const angle = branchIndex * anglePerBranch * (Math.PI / 180) + startAngle; // Total angle in radians
+                                const anglePerBranch = 360 / MAX_STALK_BRANCHES;
+                                const heightRotation = parentNode.height * 30;
+                                const startAngle = heightRotation * (Math.PI / 180);
+                                const angle = branchIndex * anglePerBranch * (Math.PI / 180) + startAngle;
 
-                                // Scale radius based on stalk height
-                                const baseRadius = 1.0; // Base radius for lowest branches
-                                const heightScale = 0.1; // How much to add per height level
+                                const baseRadius = 1.0;
+                                const heightScale = 0.1;
                                 const radius = baseRadius - parentNode.height * heightScale;
 
-                                // Calculate position on the circle
                                 targetX = parentNode.x + radius * Math.cos(angle);
                                 targetZ = parentNode.z + radius * Math.sin(angle);
-                                targetY = parentNode.y + 0.2; // Slight upward angle
+                                targetY = parentNode.y + (Math.random() * 2 - 1) * 0.125;
                             } else {
-                                // For sub-branches, continue in same general direction as parent but with variance
                                 const stalkParent = findStalkParent(parentNode);
                                 if (stalkParent) {
-                                    // Calculate current direction vector
                                     const dirX = parentNode.x - stalkParent.x;
                                     const dirZ = parentNode.z - stalkParent.z;
                                     const length = Math.sqrt(dirX * dirX + dirZ * dirZ);
 
                                     if (length > 0) {
-                                        // Calculate current angle
+                                        const cameraDirX = camera.position.x - parentNode.x;
+                                        const cameraDirZ = camera.position.z - parentNode.z;
+                                        const cameraDist = Math.sqrt(cameraDirX * cameraDirX + cameraDirZ * cameraDirZ);
+
+                                        const normalizedCameraDirX = cameraDirX / cameraDist;
+                                        const normalizedCameraDirZ = cameraDirZ / cameraDist;
+
                                         let currentAngle = Math.atan2(dirZ, dirX);
+                                        let cameraAngle = Math.atan2(normalizedCameraDirZ, normalizedCameraDirX);
 
-                                        // Add random variance of ±72 degrees
-                                        const variance = (Math.random() * 144 - 72) * (Math.PI / 180);
-                                        const newAngle = currentAngle + variance;
+                                        const cameraInfluence = 1;
 
-                                        // Scale growth length based on stalk height
+                                        // Scale variance based on camera influence
+                                        const varianceScale = 1 - cameraInfluence;
+                                        const baseVariance = ((Math.random() * 2 * 360) / MAX_STALK_BRANCHES - 360 / MAX_STALK_BRANCHES) * (Math.PI / 180);
+                                        const variance = baseVariance * varianceScale;
+
+                                        // Blend the angles
+                                        const blendedAngle = currentAngle * (1 - cameraInfluence) + cameraAngle * cameraInfluence + variance;
+
                                         const baseLength = 1.0;
-                                        const heightScale = 0.12;
+                                        const heightScale = 0.1;
                                         const growthLength = baseLength - stalkParent.height * heightScale;
 
-                                        // Calculate new direction with variance
-                                        targetX = parentNode.x + Math.cos(newAngle) * growthLength;
-                                        targetZ = parentNode.z + Math.sin(newAngle) * growthLength;
+                                        targetX = parentNode.x + Math.cos(blendedAngle) * growthLength;
+                                        targetZ = parentNode.z + Math.sin(blendedAngle) * growthLength;
                                     } else {
-                                        // Fallback if parent direction can't be determined
                                         targetX = parentNode.x + 1;
                                         targetZ = parentNode.z;
                                     }
                                 } else {
-                                    // Fallback if no stalk parent found
                                     targetX = parentNode.x + 0.5;
                                     targetZ = parentNode.z;
                                 }
@@ -557,7 +586,7 @@
                     }
 
                     // 10% chance to try root first
-                    if (Math.random() < 0.1) {
+                    if (Math.random() < 0.3) {
                         if (hasAvailableParent("root")) {
                             return "root";
                         }
@@ -624,12 +653,12 @@
                                 currentNode = addNode(0, 0, 0, type, null, { x: 0, y: 0, z: 0 });
                             } else {
                                 const parent = findParentNode(type);
-                                const targetPos = calculateTargetPosition(parent, type); // Updated to pass node type
+                                const targetPos = calculateTargetPosition(parent, type, camera); // Updated to pass node type
                                 currentNode = addNode(parent.x, parent.y, parent.z, type, parent, targetPos);
                             }
                         }
 
-                        const moveAmountY = (currentNode.moveSpeed * deltaTime) / 1000;
+                        const moveAmountY = (currentNode.moveSpeed * deltaTime) / 500;
                         const moveAmountX = moveAmountY;
                         const moveAmountZ = moveAmountY;
                         const remainingDistanceY = Math.abs(currentNode.targetY - currentNode.y);
