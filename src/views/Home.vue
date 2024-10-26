@@ -25,6 +25,7 @@
             this.moveSpeed = 1;
             this.depth = this.calculateDepth();
             this.height = this.calculateHeight();
+            this.leafCount = 0; // Add leaf counter for branch nodes
         }
 
         calculateDepth() {
@@ -105,14 +106,18 @@
                 camera.position.set(10, 0, 10);
                 camera.lookAt(0, 0, 0);
 
-                const nodeGeometry = new THREE.SphereGeometry(0.1);
+                const leafGeometry = new THREE.CircleGeometry(0.15, 32);
+                const leafMaterial = new THREE.MeshPhongMaterial({
+                    color: 0x2e8b57,
+                    side: THREE.DoubleSide,
+                });
 
+                const nodeGeometry = new THREE.SphereGeometry(0.051);
                 const nodeColors = {
                     seed: 0x8b4513, // Brown
                     root: 0x4b2b15, // Darker Brown
                     stalk: 0x8b4513, // Brown
                     branch: 0x228b22, // Forest Green
-                    // branch: 0x654321, // Saddle Brown
                 };
 
                 const nodes = {
@@ -133,12 +138,13 @@
                 const MAX_STALK_BRANCHES = 3;
                 const X_VARIANCE = 1;
                 const Z_VARIANCE = 1;
+                const ANIM_SPEED = 10;
 
                 const growthConfig = {
                     15: "root",
                     23: "stalk",
                     40: "branch",
-                    200: "branch",
+                    200: "leaf",
                 };
                 const cameraInfluence = 0.1;
 
@@ -288,8 +294,8 @@
 
                     const nodeColor = nodeColors[type];
                     const nodeMaterial = new THREE.MeshPhongMaterial({ color: nodeColor });
-
                     const nodeMesh = new THREE.Mesh(nodeGeometry, nodeMaterial);
+
                     nodeMesh.position.set(x, y, z);
                     nodeObjects.add(nodeMesh);
 
@@ -305,6 +311,32 @@
                     }
 
                     return node;
+                }
+
+                function addLeaf(parentNode) {
+                    // Calculate leaf position relative to branch
+                    const angle = Math.random() * Math.PI * 2;
+                    const radius = 0.2;
+
+                    const leafX = parentNode.x + Math.cos(angle) * radius;
+                    const leafY = parentNode.y + (Math.random() * 0.2 - 0.1); // Small vertical variance
+                    const leafZ = parentNode.z + Math.sin(angle) * radius;
+
+                    // Create leaf mesh
+                    const leafMesh = new THREE.Mesh(leafGeometry, leafMaterial);
+                    leafMesh.position.set(leafX, leafY, leafZ);
+
+                    // Random rotation for variety
+                    leafMesh.rotation.x = Math.random() * Math.PI;
+                    leafMesh.rotation.y = Math.random() * Math.PI;
+                    leafMesh.rotation.z = Math.random() * Math.PI;
+
+                    scene.add(leafMesh);
+                    parentNode.leafCount++;
+
+                    // Store leaf mesh reference in parent node
+                    if (!parentNode.leaves) parentNode.leaves = [];
+                    parentNode.leaves.push(leafMesh);
                 }
 
                 function findAvailableRootParent() {
@@ -569,7 +601,6 @@
                 function determineNodeType(index) {
                     if (index === 0) return "seed";
 
-                    // Get the default type based on index
                     const sortedRanges = Object.entries(growthConfig)
                         .map(([key, value]) => [parseInt(key), value])
                         .sort((a, b) => a[0] - b[0]);
@@ -585,32 +616,29 @@
                         defaultType = sortedRanges[sortedRanges.length - 1][1];
                     }
 
-                    // If default type has available parents, use it
+                    if (defaultType === "leaf") {
+                        const availableBranches = nodes.branch.filter((node) => node.leafCount < 2);
+                        if (availableBranches.length > 0) {
+                            const parentBranch = availableBranches[Math.floor(Math.random() * availableBranches.length)];
+                            // Create leaf and return 'leaf' type instead of null
+                            const leafMesh = addLeaf(parentBranch);
+                            return "leaf"; // Return leaf type
+                        }
+                        defaultType = "branch";
+                    }
+
                     if (hasAvailableParent(defaultType)) {
                         return defaultType;
                     }
 
-                    // 10% chance to try root first
                     if (Math.random() < 0.3) {
-                        if (hasAvailableParent("root")) {
-                            return "root";
-                        }
-                        // If no root possible, try stalk
-                        if (hasAvailableParent("stalk")) {
-                            return "stalk";
-                        }
+                        if (hasAvailableParent("root")) return "root";
+                        if (hasAvailableParent("stalk")) return "stalk";
                     } else {
-                        // 90% chance to try stalk first
-                        if (hasAvailableParent("stalk")) {
-                            return "stalk";
-                        }
-                        // If no stalk possible, try root
-                        if (hasAvailableParent("root")) {
-                            return "root";
-                        }
+                        if (hasAvailableParent("stalk")) return "stalk";
+                        if (hasAvailableParent("root")) return "root";
                     }
 
-                    // Final fallback if neither is possible (shouldn't happen often)
                     return "stalk";
                 }
                 // Add this variable outside the findParentNode function to track the last used fork
@@ -682,67 +710,98 @@
                         if (!currentNode) {
                             const type = determineNodeType(currentIndex);
 
-                            if (currentIndex === 0) {
+                            if (type === null) {
+                                // Find last added leaf
+                                const lastBranch = nodes.branch[nodes.branch.length - 1];
+                                const lastLeaf = lastBranch.leaves[lastBranch.leaves.length - 1];
+
+                                // Create a temporary node for animation
+                                currentNode = {
+                                    type: "leaf",
+                                    moveSpeed: 1,
+                                    scale: 0,
+                                    targetScale: 1,
+                                    mesh: lastLeaf,
+                                };
+
+                                // Initialize leaf scale to 0
+                                lastLeaf.scale.set(0, 0, 0);
+                            } else if (currentIndex === 0) {
                                 currentNode = addNode(0, 0, 0, type, null, { x: 0, y: 0, z: 0 });
                             } else {
                                 const parent = findParentNode(type);
-                                const targetPos = calculateTargetPosition(parent, type, camera); // Updated to pass node type
+                                const targetPos = calculateTargetPosition(parent, type, camera);
                                 currentNode = addNode(parent.x, parent.y, parent.z, type, parent, targetPos);
                             }
                         }
 
-                        const moveAmountY = (currentNode.moveSpeed * deltaTime) / 500;
-                        const moveAmountX = moveAmountY;
-                        const moveAmountZ = moveAmountY;
-                        const remainingDistanceY = Math.abs(currentNode.targetY - currentNode.y);
-                        const remainingDistanceX = Math.abs(currentNode.targetX - currentNode.x);
-                        const remainingDistanceZ = Math.abs(currentNode.targetZ - currentNode.z);
+                        if (currentNode.type === "leaf") {
+                            const scaleAmount = (currentNode.moveSpeed * deltaTime) / (1000 / ANIM_SPEED);
+                            const remainingScale = currentNode.targetScale - currentNode.scale;
 
-                        if (remainingDistanceY > moveAmountY || remainingDistanceX > moveAmountX || remainingDistanceZ > moveAmountZ) {
-                            if (remainingDistanceY > moveAmountY) {
-                                const directionY = currentNode.targetY > currentNode.y ? 1 : -1;
-                                currentNode.y += moveAmountY * directionY;
-                            }
-                            if (remainingDistanceX > moveAmountX) {
-                                const directionX = currentNode.targetX > currentNode.x ? 1 : -1;
-                                currentNode.x += moveAmountX * directionX;
-                            }
-                            if (remainingDistanceZ > moveAmountZ) {
-                                const directionZ = currentNode.targetZ > currentNode.z ? 1 : -1;
-                                currentNode.z += moveAmountZ * directionZ;
-                            }
-                            currentNode.mesh.position.set(currentNode.x, currentNode.y, currentNode.z);
-
-                            if (currentNode.connectionLine) {
-                                const positions = currentNode.connectionLine.geometry.attributes.position.array;
-                                positions[3] = currentNode.x;
-                                positions[4] = currentNode.y;
-                                positions[5] = currentNode.z;
-                                currentNode.connectionLine.geometry.attributes.position.needsUpdate = true;
+                            if (remainingScale > scaleAmount) {
+                                currentNode.scale += scaleAmount;
+                                currentNode.mesh.scale.set(currentNode.scale, currentNode.scale, currentNode.scale);
+                            } else {
+                                currentNode.scale = currentNode.targetScale;
+                                currentNode.mesh.scale.set(1, 1, 1);
+                                currentIndex++;
+                                currentNode = null;
                             }
                         } else {
-                            currentNode.x = currentNode.targetX;
-                            currentNode.y = currentNode.targetY;
-                            currentNode.z = currentNode.targetZ;
-                            currentNode.mesh.position.set(currentNode.x, currentNode.y, currentNode.z);
+                            const moveAmountY = (currentNode.moveSpeed * deltaTime) / (1000 / ANIM_SPEED);
+                            const moveAmountX = moveAmountY;
+                            const moveAmountZ = moveAmountY;
+                            const remainingDistanceY = Math.abs(currentNode.targetY - currentNode.y);
+                            const remainingDistanceX = Math.abs(currentNode.targetX - currentNode.x);
+                            const remainingDistanceZ = Math.abs(currentNode.targetZ - currentNode.z);
 
-                            if (currentNode.connectionLine) {
-                                const positions = currentNode.connectionLine.geometry.attributes.position.array;
-                                positions[3] = currentNode.x;
-                                positions[4] = currentNode.y;
-                                positions[5] = currentNode.z;
-                                currentNode.connectionLine.geometry.attributes.position.needsUpdate = true;
+                            if (remainingDistanceY > moveAmountY || remainingDistanceX > moveAmountX || remainingDistanceZ > moveAmountZ) {
+                                if (remainingDistanceY > moveAmountY) {
+                                    const directionY = currentNode.targetY > currentNode.y ? 1 : -1;
+                                    currentNode.y += moveAmountY * directionY;
+                                }
+                                if (remainingDistanceX > moveAmountX) {
+                                    const directionX = currentNode.targetX > currentNode.x ? 1 : -1;
+                                    currentNode.x += moveAmountX * directionX;
+                                }
+                                if (remainingDistanceZ > moveAmountZ) {
+                                    const directionZ = currentNode.targetZ > currentNode.z ? 1 : -1;
+                                    currentNode.z += moveAmountZ * directionZ;
+                                }
+                                currentNode.mesh.position.set(currentNode.x, currentNode.y, currentNode.z);
+
+                                if (currentNode.connectionLine) {
+                                    const positions = currentNode.connectionLine.geometry.attributes.position.array;
+                                    positions[3] = currentNode.x;
+                                    positions[4] = currentNode.y;
+                                    positions[5] = currentNode.z;
+                                    currentNode.connectionLine.geometry.attributes.position.needsUpdate = true;
+                                }
+                            } else {
+                                currentNode.x = currentNode.targetX;
+                                currentNode.y = currentNode.targetY;
+                                currentNode.z = currentNode.targetZ;
+                                currentNode.mesh.position.set(currentNode.x, currentNode.y, currentNode.z);
+
+                                if (currentNode.connectionLine) {
+                                    const positions = currentNode.connectionLine.geometry.attributes.position.array;
+                                    positions[3] = currentNode.x;
+                                    positions[4] = currentNode.y;
+                                    positions[5] = currentNode.z;
+                                    currentNode.connectionLine.geometry.attributes.position.needsUpdate = true;
+                                }
+
+                                currentIndex++;
+                                currentNode = null;
                             }
-
-                            currentIndex++;
-                            currentNode = null;
                         }
 
                         if (currentNode) {
-                            nodePosition.x = currentNode.x;
-                            nodePosition.y = currentNode.y;
-                            nodePosition.z = currentNode.z;
-                            nodeInfo.depth = currentNode.depth;
+                            nodePosition.x = currentNode.x || 0;
+                            nodePosition.y = currentNode.y || 0;
+                            nodePosition.z = currentNode.z || 0;
+                            nodeInfo.depth = currentNode.depth || 0;
                             nodeInfo.type = currentNode.type;
                         }
                     }
