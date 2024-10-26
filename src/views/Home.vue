@@ -11,6 +11,7 @@
     import * as THREE from "three";
     import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
     import GUI from "lil-gui";
+    import gsap from "gsap";
 
     class Node {
         constructor(x, y, z, type, parent = null) {
@@ -94,8 +95,8 @@
                 const renderer = new THREE.WebGLRenderer({ canvas: canvas.value });
                 renderer.setSize(window.innerWidth, window.innerHeight);
 
-                const controls = new OrbitControls(camera, renderer.domElement);
-                controls.enableDamping = true;
+                // const controls = new OrbitControls(camera, renderer.domElement);
+                // controls.enableDamping = true;
 
                 const sceneLight = new THREE.AmbientLight(0xffffff, 0.5);
                 scene.add(sceneLight);
@@ -105,8 +106,51 @@
                 gridHelper.material = gridHelperMaterial;
                 scene.add(gridHelper);
 
-                camera.position.set(10, 0, 10);
-                camera.lookAt(0, 0, 0);
+                const cameraTarget = new THREE.Vector3(0, 0, 0);
+                let currentRadius = 15; // Start with 15 units radius
+                let rotationSpeed = 0.2; // Full rotations per second
+
+                // Set initial camera position
+                camera.position.x = currentRadius;
+                camera.position.z = 0;
+                camera.position.y = 1;
+                camera.lookAt(cameraTarget);
+
+                function updateCameraPosition(time) {
+                    const angle = time * rotationSpeed * Math.PI * 2;
+                    camera.position.x = Math.cos(angle) * currentRadius;
+                    camera.position.z = Math.sin(angle) * currentRadius;
+                    camera.lookAt(new THREE.Vector3(0, camera.position.y, 0));
+                }
+
+                function animateCameraForStalk() {
+                    const nextRadius = currentRadius + 1;
+                    const nextHeight = camera.position.y + 1;
+
+                    gsap.to(camera.position, {
+                        y: nextHeight,
+                        duration: 1,
+                        ease: "power2.inOut",
+                    });
+
+                    gsap.to(cameraTarget, {
+                        y: nextHeight,
+                        duration: 1,
+                        ease: "power2.inOut",
+                    });
+
+                    gsap.to(
+                        { value: currentRadius },
+                        {
+                            value: nextRadius,
+                            duration: 1,
+                            ease: "power2.inOut",
+                            onUpdate: function () {
+                                currentRadius = this.targets()[0].value;
+                            },
+                        },
+                    );
+                }
 
                 const leafGeometry = new THREE.CircleGeometry(0.15, 32);
                 const nodeGeometry = new THREE.SphereGeometry(0.051);
@@ -280,14 +324,14 @@
                                         const normalizedCameraDirX = cameraDirX / cameraDist;
                                         const normalizedCameraDirZ = cameraDirZ / cameraDist;
 
-                                        let currentAngle = Math.atan2(dirZ, dirX);
+                                        let currentCamAngle = Math.atan2(dirZ, dirX);
                                         let cameraAngle = Math.atan2(normalizedCameraDirZ, normalizedCameraDirX);
 
                                         const varianceScale = 1 - cameraInfluence;
                                         const baseVariance = ((Math.random() * 2 * 360) / MAX_STALK_BRANCHES - 360 / MAX_STALK_BRANCHES) * (Math.PI / 180);
                                         const variance = baseVariance * varianceScale;
 
-                                        const blendedAngle = currentAngle * (1 - cameraInfluence) + cameraAngle * cameraInfluence + variance;
+                                        const blendedAngle = currentCamAngle * (1 - cameraInfluence) + cameraAngle * cameraInfluence + variance;
 
                                         const baseLength = 1.0;
                                         const heightScale = 0.95;
@@ -570,11 +614,13 @@
 
                 let currentIndex = 0;
                 let elapsedTime = 0;
+                let lastStalkHeight = 0;
                 let currentNode = null;
 
                 function animate(time) {
                     requestAnimationFrame(animate);
-                    controls.update();
+                    // controls.update();
+                    updateCameraPosition(time/10000);
 
                     const deltaTime = time - elapsedTime;
                     elapsedTime = time;
@@ -600,6 +646,13 @@
                                 }
                                 const targetPos = calculateTargetPosition(parent, type, camera);
                                 currentNode = addNode(parent.x, parent.y, parent.z, type, parent, targetPos);
+
+                                if (type === "stalk") {
+                                    if (currentNode.height > lastStalkHeight) {
+                                        lastStalkHeight = currentNode.height;
+                                        animateCameraForStalk();
+                                    }
+                                }
                             }
                         }
 
@@ -675,6 +728,7 @@
                         }
                     }
 
+                    camera.lookAt(cameraTarget);
                     renderer.render(scene, camera);
                 }
 
