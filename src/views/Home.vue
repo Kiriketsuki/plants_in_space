@@ -5,6 +5,7 @@
             class="w-full h-full"></canvas>
     </div>
 </template>
+
 <script>
     import { ref, onMounted } from "vue";
     import * as THREE from "three";
@@ -25,13 +26,14 @@
             this.moveSpeed = 1;
             this.depth = this.calculateDepth();
             this.height = this.calculateHeight();
-            this.leafCount = 0; // Add leaf counter for branch nodes
+            this.leafCount = 0;
         }
 
         calculateDepth() {
             if (this.type === "seed") return 0;
             if (this.type === "stalk") return 0;
             if (this.type === "branch") return 0;
+            if (this.type === "leaf") return this.parent ? this.parent.depth + 1 : 0;
 
             let currentNode = this;
             let depth = 0;
@@ -49,6 +51,7 @@
 
         calculateHeight() {
             if (this.type === "seed") return 0;
+            if (this.type === "leaf") return this.parent ? this.parent.height : 0;
             if (this.type === "stalk") {
                 let height = 0;
                 let current = this;
@@ -60,7 +63,6 @@
                 }
                 return height;
             }
-            // For branches, get parent stalk's height
             if (this.type === "branch") {
                 let current = this;
                 while (current.parent) {
@@ -107,17 +109,14 @@
                 camera.lookAt(0, 0, 0);
 
                 const leafGeometry = new THREE.CircleGeometry(0.15, 32);
-                const leafMaterial = new THREE.MeshPhongMaterial({
-                    color: 0x2e8b57,
-                    side: THREE.DoubleSide,
-                });
-
                 const nodeGeometry = new THREE.SphereGeometry(0.051);
+
                 const nodeColors = {
-                    seed: 0x8b4513, // Brown
-                    root: 0x4b2b15, // Darker Brown
-                    stalk: 0x8b4513, // Brown
-                    branch: 0x228b22, // Forest Green
+                    seed: 0x8b4513,
+                    root: 0x4b2b15,
+                    stalk: 0x8b4513,
+                    branch: 0x228b22,
+                    leaf: 0x2e8b57,
                 };
 
                 const nodes = {
@@ -125,6 +124,7 @@
                     root: [],
                     stalk: [],
                     branch: [],
+                    leaf: [],
                 };
 
                 const nodeObjects = new THREE.Group();
@@ -139,21 +139,83 @@
                 const X_VARIANCE = 1;
                 const Z_VARIANCE = 1;
                 const ANIM_SPEED = 10;
+                const cameraInfluence = 0.1;
 
                 const growthConfig = {
                     15: "root",
-                    23: "stalk",
-                    40: "branch",
-                    200: "leaf",
+                    1000: "leaf",
                 };
-                const cameraInfluence = 0.1;
 
                 let firstFork = -1;
+                let lastUsedForkIndex = 0;
+
+                function addNode(x, y, z, type, parent = null, targetPos = null) {
+                    const node = new Node(x, y, z, type, parent);
+                    nodes[type].push(node);
+
+                    if (parent) {
+                        parent.addChild(node);
+                        if (type === "leaf") {
+                            parent.leafCount++;
+                        }
+                    }
+
+                    if (targetPos) {
+                        node.targetX = targetPos.x;
+                        node.targetY = targetPos.y;
+                        node.targetZ = targetPos.z;
+                    }
+
+                    const nodeColor = nodeColors[type];
+                    const nodeMaterial = new THREE.MeshPhongMaterial({ color: nodeColor });
+
+                    let nodeMesh;
+                    if (type === "leaf") {
+                        nodeMesh = new THREE.Mesh(leafGeometry, nodeMaterial);
+                        // Set initial scale to 0 for leaves
+                        nodeMesh.scale.set(0, 0, 0);
+                        // Add target scale property for animation
+                        node.targetScale = 1;
+                        // Random rotation for variety
+                        nodeMesh.rotation.x = Math.random() * Math.PI;
+                        nodeMesh.rotation.y = Math.random() * Math.PI;
+                        nodeMesh.rotation.z = Math.random() * Math.PI;
+                    } else {
+                        nodeMesh = new THREE.Mesh(nodeGeometry, nodeMaterial);
+                    }
+
+                    nodeMesh.position.set(x, y, z);
+                    nodeObjects.add(nodeMesh);
+
+                    node.mesh = nodeMesh;
+
+                    if (parent && type !== "leaf") {
+                        // Only create connection lines for non-leaf nodes
+                        const connectionGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(parent.x, parent.y, parent.z), new THREE.Vector3(x, y, z)]);
+                        const connectionMaterial = new THREE.LineBasicMaterial({ color: nodeColor });
+                        const connectionLine = new THREE.Line(connectionGeometry, connectionMaterial);
+                        connectionObjects.add(connectionLine);
+
+                        node.connectionLine = connectionLine;
+                    }
+
+                    return node;
+                }
+
                 function calculateTargetPosition(parentNode, type, camera) {
                     let targetX, targetY, targetZ;
+
+                    if (type === "leaf") {
+                        const angle = Math.random() * Math.PI * 2;
+                        const radius = 0.2;
+                        targetX = parentNode.x + Math.cos(angle) * radius;
+                        targetY = parentNode.y + (Math.random() * 0.2 - 0.1);
+                        targetZ = parentNode.z + Math.sin(angle) * radius;
+                        return { x: targetX, y: targetY, z: targetZ };
+                    }
+
                     switch (type) {
-                        case "root":
-                            // Calculate camera direction influence for roots
+                        case "root": {
                             const cameraDirX = camera.position.x - parentNode.x;
                             const cameraDirZ = camera.position.z - parentNode.z;
                             const cameraDist = Math.sqrt(cameraDirX * cameraDirX + cameraDirZ * cameraDirZ);
@@ -161,7 +223,6 @@
                             const normalizedCameraDirX = cameraDirX / cameraDist;
                             const normalizedCameraDirZ = cameraDirZ / cameraDist;
 
-                            // Calculate current downward angle (for roots this is a random direction)
                             const randomAngle = Math.random() * 2 * Math.PI;
                             const cameraAngle = Math.atan2(normalizedCameraDirZ, normalizedCameraDirX);
 
@@ -169,31 +230,28 @@
                             const baseVariance = ((Math.random() * 2 * 360) / MAX_STALK_BRANCHES - 360 / MAX_STALK_BRANCHES) * (Math.PI / 180);
                             const variance = baseVariance * varianceScale;
 
-                            // Blend random angle with camera direction
                             const blendedAngle = randomAngle * (1 - cameraInfluence) + cameraAngle * cameraInfluence + variance;
 
-                            // Apply the direction with X_VARIANCE as the growth length
                             targetY = parentNode.y - 1;
                             targetX = parentNode.x + Math.cos(blendedAngle) * X_VARIANCE;
                             targetZ = parentNode.z + Math.sin(blendedAngle) * Z_VARIANCE;
                             break;
-                        case "stalk":
+                        }
+                        case "stalk": {
                             targetY = parentNode.y + 1;
 
                             if (parentNode.height === 3) {
-                                // For height 3 stalks, grow in a specific direction
                                 targetX = parentNode.x - 1 * firstFork;
                                 targetZ = parentNode.z + 1 * firstFork;
                                 firstFork = firstFork * -1;
-                                break;
+                            } else {
+                                targetX = parentNode.x + (Math.random() * 2 - 1) * (X_VARIANCE * 0.5);
+                                targetZ = parentNode.z + (Math.random() * 2 - 1) * (Z_VARIANCE * 0.5);
                             }
-                            targetX = parentNode.x + (Math.random() * 2 - 1) * (X_VARIANCE * 0.5);
-                            targetZ = parentNode.z + (Math.random() * 2 - 1) * (Z_VARIANCE * 0.5);
                             break;
-
-                        case "branch":
+                        }
+                        case "branch": {
                             if (parentNode.type === "stalk") {
-                                // Original stalk branch logic remains the same
                                 const branchIndex = parentNode.children.length;
                                 const anglePerBranch = 360 / MAX_STALK_BRANCHES;
                                 const heightRotation = parentNode.height * 30;
@@ -202,8 +260,7 @@
 
                                 const baseRadius = 1.0;
                                 const heightScale = 0.95;
-                                const radius = heightScale ** parentNode.height * baseRadius;
-                                // const radius = baseRadius - parentNode.height * heightScale;
+                                const radius = Math.pow(heightScale, parentNode.height) * baseRadius;
 
                                 targetX = parentNode.x + radius * Math.cos(angle);
                                 targetZ = parentNode.z + radius * Math.sin(angle);
@@ -226,18 +283,15 @@
                                         let currentAngle = Math.atan2(dirZ, dirX);
                                         let cameraAngle = Math.atan2(normalizedCameraDirZ, normalizedCameraDirX);
 
-                                        // Scale variance based on camera influence
                                         const varianceScale = 1 - cameraInfluence;
                                         const baseVariance = ((Math.random() * 2 * 360) / MAX_STALK_BRANCHES - 360 / MAX_STALK_BRANCHES) * (Math.PI / 180);
                                         const variance = baseVariance * varianceScale;
 
-                                        // Blend the angles
                                         const blendedAngle = currentAngle * (1 - cameraInfluence) + cameraAngle * cameraInfluence + variance;
 
                                         const baseLength = 1.0;
                                         const heightScale = 0.95;
-                                        // const growthLength = baseLength - stalkParent.height * heightScale;
-                                        const growthLength = heightScale ** stalkParent.height * baseLength;
+                                        const growthLength = Math.pow(heightScale, stalkParent.height) * baseLength;
 
                                         targetX = parentNode.x + Math.cos(blendedAngle) * growthLength;
                                         targetZ = parentNode.z + Math.sin(blendedAngle) * growthLength;
@@ -252,21 +306,16 @@
                                 targetY = parentNode.y + (Math.random() * 2 - 1) * 0.25;
                             }
                             break;
-
+                        }
                         default:
                             targetY = parentNode.y;
                             targetX = parentNode.x;
                             targetZ = parentNode.z;
                     }
 
-                    return {
-                        x: targetX,
-                        y: targetY,
-                        z: targetZ,
-                    };
+                    return { x: targetX, y: targetY, z: targetZ };
                 }
 
-                // Helper function to find the original stalk parent of a branch
                 function findStalkParent(node) {
                     let current = node;
                     while (current.parent) {
@@ -278,256 +327,83 @@
                     return null;
                 }
 
-                function addNode(x, y, z, type, parent = null, targetPos = null) {
-                    const node = new Node(x, y, z, type, parent);
-                    nodes[type].push(node);
-
-                    if (parent) {
-                        parent.addChild(node);
-                    }
-
-                    if (targetPos) {
-                        node.targetX = targetPos.x;
-                        node.targetY = targetPos.y;
-                        node.targetZ = targetPos.z;
-                    }
-
-                    const nodeColor = nodeColors[type];
-                    const nodeMaterial = new THREE.MeshPhongMaterial({ color: nodeColor });
-                    const nodeMesh = new THREE.Mesh(nodeGeometry, nodeMaterial);
-
-                    nodeMesh.position.set(x, y, z);
-                    nodeObjects.add(nodeMesh);
-
-                    node.mesh = nodeMesh;
-
-                    if (parent) {
-                        const connectionGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(parent.x, parent.y, parent.z), new THREE.Vector3(x, y, z)]);
-                        const connectionMaterial = new THREE.LineBasicMaterial({ color: nodeColor });
-                        const connectionLine = new THREE.Line(connectionGeometry, connectionMaterial);
-                        connectionObjects.add(connectionLine);
-
-                        node.connectionLine = connectionLine;
-                    }
-
-                    return node;
-                }
-
-                function addLeaf(parentNode) {
-                    // Calculate leaf position relative to branch
-                    const angle = Math.random() * Math.PI * 2;
-                    const radius = 0.2;
-
-                    const leafX = parentNode.x + Math.cos(angle) * radius;
-                    const leafY = parentNode.y + (Math.random() * 0.2 - 0.1); // Small vertical variance
-                    const leafZ = parentNode.z + Math.sin(angle) * radius;
-
-                    // Create leaf mesh
-                    const leafMesh = new THREE.Mesh(leafGeometry, leafMaterial);
-                    leafMesh.position.set(leafX, leafY, leafZ);
-
-                    // Random rotation for variety
-                    leafMesh.rotation.x = Math.random() * Math.PI;
-                    leafMesh.rotation.y = Math.random() * Math.PI;
-                    leafMesh.rotation.z = Math.random() * Math.PI;
-
-                    scene.add(leafMesh);
-                    parentNode.leafCount++;
-
-                    // Store leaf mesh reference in parent node
-                    if (!parentNode.leaves) parentNode.leaves = [];
-                    parentNode.leaves.push(leafMesh);
-                }
-
-                function findAvailableRootParent() {
-                    const eligibleNodes = [...nodes.root];
-                    if (nodes.seed.length > 0) eligibleNodes.push(...nodes.seed);
-                    if (nodes.stalk.length > 0) eligibleNodes.push(...nodes.stalk);
-
-                    // Group nodes by their type
-                    const categorizedNodes = eligibleNodes.reduce((acc, node) => {
-                        const category = node.type === "root" ? "root" : "other";
-                        if (!acc[category]) acc[category] = [];
-                        acc[category].push(node);
-                        return acc;
-                    }, {});
-
-                    // Sort root nodes by depth (highest first)
-                    if (categorizedNodes.root) {
-                        categorizedNodes.root.sort((a, b) => {
-                            if (a.depth !== b.depth) return b.depth - a.depth;
-                            return a.children.length - b.children.length;
-                        });
-
-                        // Check highest depth nodes first
-                        for (const node of categorizedNodes.root) {
-                            const potentialChildDepth = node.depth + 1;
-                            if (potentialChildDepth <= MAX_ROOT_DEPTH && node.children.length < MAX_CHILDREN) {
-                                return node;
-                            }
-                        }
-                    }
-
-                    // If no suitable root nodes, check other nodes
-                    // Seed has lowest priority, then stalk
-                    const otherNodes = categorizedNodes.other || [];
-                    otherNodes.sort((a, b) => {
-                        if (a.type === "seed" && b.type !== "seed") return 1;
-                        if (b.type === "seed" && a.type !== "seed") return -1;
-                        return a.children.length - b.children.length;
-                    });
-
-                    // Return first eligible non-root node
-                    for (const node of otherNodes) {
-                        if (node.type === "seed" || node.children.length < MAX_CHILDREN) {
-                            return node;
-                        }
-                    }
-
-                    // Final fallback to seed
-                    return nodes.seed[0];
-                }
-
-                function findAvailableBranchParent() {
-                    const eligibleNodes = [...nodes.branch];
-                    if (nodes.stalk.length > 0) eligibleNodes.push(...nodes.stalk);
-
-                    // Calculate branch length and determine if it's an endpoint
-                    const getBranchInfo = (node) => {
-                        let length = 0;
-                        let current = node;
-                        let isEndpoint = true;
-
-                        // Traverse up to find length and check if it's a terminal branch
-                        while (current && current.type === "branch") {
-                            if (current.children.length >= MAX_CHILDREN) {
-                                isEndpoint = false;
-                            }
-                            length++;
-                            current = current.parent;
-                        }
-                        return { length, isEndpoint };
-                    };
-
-                    // Group nodes by their type
-                    const categorizedNodes = eligibleNodes.reduce((acc, node) => {
-                        const category = node.type === "branch" ? "branch" : "stalk";
-                        if (!acc[category]) acc[category] = [];
-                        acc[category].push(node);
-                        return acc;
-                    }, {});
-
-                    // Process branch nodes first
-                    if (categorizedNodes.branch) {
-                        // Sort branches by length (longest first) and endpoints
-                        categorizedNodes.branch.sort((a, b) => {
-                            const aInfo = getBranchInfo(a);
-                            const bInfo = getBranchInfo(b);
-
-                            // Prioritize endpoints of longest branches
-                            if (aInfo.isEndpoint !== bInfo.isEndpoint) {
-                                return aInfo.isEndpoint ? -1 : 1;
-                            }
-                            // Then by length
-                            if (aInfo.length !== bInfo.length) {
-                                return bInfo.length - aInfo.length;
-                            }
-                            // Finally by number of children
-                            return a.children.length - b.children.length;
-                        });
-
-                        // Find first eligible branch node
-                        for (const node of categorizedNodes.branch) {
-                            const branchInfo = getBranchInfo(node);
-                            if (branchInfo.length < MAX_BRANCH_LENGTH && node.children.length < MAX_CHILDREN) {
-                                return node;
-                            }
-                        }
-                    }
-
-                    // If no suitable branches, check stalks with modified priority
-                    if (categorizedNodes.stalk) {
-                        // Sort stalks by prioritizing those that already have branches but aren't full
-                        const sortedStalks = categorizedNodes.stalk
-                            .filter((node) => node.children.length < MAX_STALK_BRANCHES)
-                            .sort((a, b) => {
-                                // First prioritize stalks that have branches but aren't full
-                                const aHasBranches = a.children.length > 0;
-                                const bHasBranches = b.children.length > 0;
-
-                                if (aHasBranches !== bHasBranches) {
-                                    return bHasBranches ? 1 : -1;
-                                }
-
-                                // If both have branches or both don't have branches,
-                                // prefer the stalk that's most recently used (higher index)
-                                return b.children.length - a.children.length;
-                            });
-
-                        if (sortedStalks.length > 0) {
-                            return sortedStalks[0];
-                        }
-                    }
-
-                    // Final fallback to most recent stalk
-                    const lastStalk = nodes.stalk[nodes.stalk.length - 1];
-                    return lastStalk && lastStalk.children.length < MAX_STALK_BRANCHES ? lastStalk : null;
-                }
-
-                // Add this helper function to count specific types of children
                 function countChildrenOfType(node, types) {
                     return node.children.filter((child) => types.includes(child.type)).length;
                 }
 
-                function hasAvailableParent(type) {
-                    switch (type) {
-                        case "root":
-                            const rootParent = findAvailableRootParent();
-                            return rootParent && countChildrenOfType(rootParent, ["root"]) < MAX_CHILDREN;
+                function findAvailableRootParent() {
+                    // Only include root nodes and seed node as potential parents
+                    const eligibleNodes = [...nodes.root];
+                    if (nodes.seed.length > 0) eligibleNodes.push(...nodes.seed);
 
-                        case "stalk":
-                            const stalkParent = nodes.stalk[nodes.stalk.length - 1] || nodes.seed[0];
-                            // Stalks can always grow from other stalks (no child limit for stalk-to-stalk)
-                            return stalkParent != null;
+                    // Group nodes by their type
+                    const categorizedNodes = eligibleNodes.reduce((acc, node) => {
+                        const category = node.type === "root" ? "root" : "seed";
+                        if (!acc[category]) acc[category] = [];
+                        acc[category].push(node);
+                        return acc;
+                    }, {});
 
-                        case "branch":
-                            // Check if any stalks have room for branches
-                            const availableStalk = nodes.stalk.some((node) => countChildrenOfType(node, ["branch"]) < MAX_STALK_BRANCHES);
-                            if (availableStalk) return true;
+                    // Check root nodes first
+                    if (categorizedNodes.root) {
+                        // Sort root nodes by depth (highest first) and number of children
+                        categorizedNodes.root.sort((a, b) => {
+                            if (a.depth !== b.depth) return b.depth - a.depth;
+                            return countChildrenOfType(a, ["root"]) - countChildrenOfType(b, ["root"]);
+                        });
 
-                            // Check if any branches have room for sub-branches
-                            return nodes.branch.some((node) => {
-                                const branchInfo = getBranchInfo(node);
-                                return branchInfo.length < MAX_BRANCH_LENGTH && countChildrenOfType(node, ["branch"]) < MAX_CHILDREN;
-                            });
-
-                        default:
-                            return false;
+                        // Find first eligible root node
+                        for (const node of categorizedNodes.root) {
+                            const potentialChildDepth = node.depth + 1;
+                            if (potentialChildDepth <= MAX_ROOT_DEPTH && countChildrenOfType(node, ["root"]) < MAX_CHILDREN) {
+                                return node;
+                            }
+                        }
                     }
+
+                    // If no suitable root nodes, return seed if available and eligible
+                    if (categorizedNodes.seed && categorizedNodes.seed.length > 0) {
+                        const seedNode = categorizedNodes.seed[0];
+                        if (countChildrenOfType(seedNode, ["root"]) < MAX_CHILDREN) {
+                            return seedNode;
+                        }
+                    }
+
+                    return nodes.seed[0];
                 }
 
-                // Update findAvailableBranchParent to use the new counting method
+                function findAvailableLeafParent() {
+                    const eligibleBranches = nodes.branch.filter((branch) => branch.leafCount < 2);
+
+                    if (eligibleBranches.length === 0) return null;
+
+                    eligibleBranches.sort((a, b) => {
+                        const aLeafCount = countChildrenOfType(a, ["leaf"]);
+                        const bLeafCount = countChildrenOfType(b, ["leaf"]);
+                        return aLeafCount - bLeafCount;
+                    });
+
+                    return eligibleBranches[0];
+                }
+
+                function getBranchInfo(node) {
+                    let length = 0;
+                    let current = node;
+                    let isEndpoint = true;
+                    while (current && current.type === "branch") {
+                        if (countChildrenOfType(current, ["branch"]) >= MAX_CHILDREN) {
+                            isEndpoint = false;
+                        }
+                        length++;
+                        current = current.parent;
+                    }
+                    return { length, isEndpoint };
+                }
+
                 function findAvailableBranchParent() {
                     const eligibleNodes = [...nodes.branch];
                     if (nodes.stalk.length > 0) eligibleNodes.push(...nodes.stalk);
 
-                    // Calculate branch length and determine if it's an endpoint
-                    const getBranchInfo = (node) => {
-                        let length = 0;
-                        let current = node;
-                        let isEndpoint = true;
-
-                        while (current && current.type === "branch") {
-                            if (countChildrenOfType(current, ["branch"]) >= MAX_CHILDREN) {
-                                isEndpoint = false;
-                            }
-                            length++;
-                            current = current.parent;
-                        }
-                        return { length, isEndpoint };
-                    };
-
-                    // Group nodes by their type
                     const categorizedNodes = eligibleNodes.reduce((acc, node) => {
                         const category = node.type === "branch" ? "branch" : "stalk";
                         if (!acc[category]) acc[category] = [];
@@ -535,7 +411,6 @@
                         return acc;
                     }, {});
 
-                    // Process branch nodes first
                     if (categorizedNodes.branch) {
                         categorizedNodes.branch.sort((a, b) => {
                             const aInfo = getBranchInfo(a);
@@ -558,7 +433,6 @@
                         }
                     }
 
-                    // If no suitable branches, check stalks with modified priority
                     if (categorizedNodes.stalk) {
                         const sortedStalks = categorizedNodes.stalk
                             .filter((node) => countChildrenOfType(node, ["branch"]) < MAX_STALK_BRANCHES)
@@ -578,24 +452,70 @@
                         }
                     }
 
-                    // Final fallback to most recent stalk if it has room for branches
                     const lastStalk = nodes.stalk[nodes.stalk.length - 1];
                     return lastStalk && countChildrenOfType(lastStalk, ["branch"]) < MAX_STALK_BRANCHES ? lastStalk : null;
                 }
 
-                // Helper function to calculate branch info (moved outside for reuse)
-                function getBranchInfo(node) {
-                    let length = 0;
-                    let current = node;
-                    let isEndpoint = true;
-                    while (current && current.type === "branch") {
-                        if (countChildrenOfType(current, ["branch"]) >= MAX_CHILDREN) {
-                            isEndpoint = false;
-                        }
-                        length++;
-                        current = current.parent;
+                function hasAvailableParent(type) {
+                    switch (type) {
+                        case "root":
+                            const rootParent = findAvailableRootParent();
+                            return rootParent && countChildrenOfType(rootParent, ["root"]) < MAX_CHILDREN;
+
+                        case "stalk":
+                            const stalkParent = nodes.stalk[nodes.stalk.length - 1] || nodes.seed[0];
+                            return stalkParent != null;
+
+                        case "branch":
+                            const availableStalk = nodes.stalk.some((node) => countChildrenOfType(node, ["branch"]) < MAX_STALK_BRANCHES);
+                            if (availableStalk) return true;
+
+                            return nodes.branch.some((node) => {
+                                const branchInfo = getBranchInfo(node);
+                                return branchInfo.length < MAX_BRANCH_LENGTH && countChildrenOfType(node, ["branch"]) < MAX_CHILDREN;
+                            });
+
+                        case "leaf":
+                            return nodes.branch.some((branch) => branch.leafCount < 2);
+
+                        default:
+                            return false;
                     }
-                    return { length, isEndpoint };
+                }
+
+                function findParentNode(type) {
+                    switch (type) {
+                        case "root":
+                            return findAvailableRootParent();
+
+                        case "stalk": {
+                            const currentStalks = nodes.stalk;
+                            const height3Stalks = currentStalks.filter((node) => node.height === 3 && countChildrenOfType(node, ["stalk"]) < 2);
+
+                            if (height3Stalks.length > 0) {
+                                return height3Stalks[0];
+                            }
+
+                            const leafStalks = currentStalks.filter((node) => countChildrenOfType(node, ["stalk"]) === 0);
+
+                            if (leafStalks.length > 0) {
+                                leafStalks.sort((a, b) => currentStalks.indexOf(a) - currentStalks.indexOf(b));
+                                lastUsedForkIndex = (lastUsedForkIndex + 1) % leafStalks.length;
+                                return leafStalks[lastUsedForkIndex];
+                            }
+
+                            return nodes.stalk[nodes.stalk.length - 1] || nodes.seed[0];
+                        }
+
+                        case "branch":
+                            return findAvailableBranchParent();
+
+                        case "leaf":
+                            return findAvailableLeafParent();
+
+                        default:
+                            return null;
+                    }
                 }
 
                 function determineNodeType(index) {
@@ -617,12 +537,8 @@
                     }
 
                     if (defaultType === "leaf") {
-                        const availableBranches = nodes.branch.filter((node) => node.leafCount < 2);
-                        if (availableBranches.length > 0) {
-                            const parentBranch = availableBranches[Math.floor(Math.random() * availableBranches.length)];
-                            // Create leaf and return 'leaf' type instead of null
-                            const leafMesh = addLeaf(parentBranch);
-                            return "leaf"; // Return leaf type
+                        if (hasAvailableParent("leaf")) {
+                            return "leaf";
                         }
                         defaultType = "branch";
                     }
@@ -640,47 +556,6 @@
                     }
 
                     return "stalk";
-                }
-                // Add this variable outside the findParentNode function to track the last used fork
-                let lastUsedForkIndex = 0;
-
-                function findParentNode(type) {
-                    switch (type) {
-                        case "root":
-                            return findAvailableRootParent();
-
-                        case "stalk":
-                            const currentStalks = nodes.stalk;
-                            // Special handling for height 3 stalks
-                            const height3Stalks = currentStalks.filter((node) => node.height === 3 && countChildrenOfType(node, ["stalk"]) < 2);
-
-                            if (height3Stalks.length > 0) {
-                                // Return a height 3 stalk that doesn't have 2 stalk children yet
-                                return height3Stalks[0];
-                            }
-
-                            // Get all leaf stalks (stalks with no stalk children)
-                            const leafStalks = currentStalks.filter((node) => countChildrenOfType(node, ["stalk"]) === 0);
-
-                            // If we have leaf stalks, alternate between them
-                            if (leafStalks.length > 0) {
-                                // Sort leaf stalks by their creation order to maintain consistent alternation
-                                leafStalks.sort((a, b) => currentStalks.indexOf(a) - currentStalks.indexOf(b));
-
-                                // Alternate between available leaf stalks
-                                lastUsedForkIndex = (lastUsedForkIndex + 1) % leafStalks.length;
-                                return leafStalks[lastUsedForkIndex];
-                            }
-
-                            // Default behavior if no other conditions met
-                            return nodes.stalk[nodes.stalk.length - 1] || nodes.seed[0];
-
-                        case "branch":
-                            return findAvailableBranchParent();
-
-                        default:
-                            return null;
-                    }
                 }
 
                 const gui = new GUI();
@@ -711,64 +586,58 @@
                             const type = determineNodeType(currentIndex);
 
                             if (type === null) {
-                                // Find last added leaf
-                                const lastBranch = nodes.branch[nodes.branch.length - 1];
-                                const lastLeaf = lastBranch.leaves[lastBranch.leaves.length - 1];
+                                currentIndex++;
+                                return;
+                            }
 
-                                // Create a temporary node for animation
-                                currentNode = {
-                                    type: "leaf",
-                                    moveSpeed: 1,
-                                    scale: 0,
-                                    targetScale: 1,
-                                    mesh: lastLeaf,
-                                };
-
-                                // Initialize leaf scale to 0
-                                lastLeaf.scale.set(0, 0, 0);
-                            } else if (currentIndex === 0) {
+                            if (currentIndex === 0) {
                                 currentNode = addNode(0, 0, 0, type, null, { x: 0, y: 0, z: 0 });
                             } else {
                                 const parent = findParentNode(type);
+                                if (!parent) {
+                                    currentIndex++;
+                                    return;
+                                }
                                 const targetPos = calculateTargetPosition(parent, type, camera);
                                 currentNode = addNode(parent.x, parent.y, parent.z, type, parent, targetPos);
                             }
                         }
 
                         if (currentNode.type === "leaf") {
+                            // Handle leaf scaling animation
                             const scaleAmount = (currentNode.moveSpeed * deltaTime) / (1000 / ANIM_SPEED);
-                            const remainingScale = currentNode.targetScale - currentNode.scale;
+                            const currentScale = currentNode.mesh.scale.x;
+                            const remainingScale = currentNode.targetScale - currentScale;
 
                             if (remainingScale > scaleAmount) {
-                                currentNode.scale += scaleAmount;
-                                currentNode.mesh.scale.set(currentNode.scale, currentNode.scale, currentNode.scale);
+                                const newScale = currentScale + scaleAmount;
+                                currentNode.mesh.scale.set(newScale, newScale, newScale);
                             } else {
-                                currentNode.scale = currentNode.targetScale;
-                                currentNode.mesh.scale.set(1, 1, 1);
+                                currentNode.mesh.scale.set(currentNode.targetScale, currentNode.targetScale, currentNode.targetScale);
                                 currentIndex++;
                                 currentNode = null;
                             }
                         } else {
-                            const moveAmountY = (currentNode.moveSpeed * deltaTime) / (1000 / ANIM_SPEED);
-                            const moveAmountX = moveAmountY;
-                            const moveAmountZ = moveAmountY;
+                            // Handle regular node movement animation
+                            const moveAmount = (currentNode.moveSpeed * deltaTime) / (1000 / ANIM_SPEED);
                             const remainingDistanceY = Math.abs(currentNode.targetY - currentNode.y);
                             const remainingDistanceX = Math.abs(currentNode.targetX - currentNode.x);
                             const remainingDistanceZ = Math.abs(currentNode.targetZ - currentNode.z);
 
-                            if (remainingDistanceY > moveAmountY || remainingDistanceX > moveAmountX || remainingDistanceZ > moveAmountZ) {
-                                if (remainingDistanceY > moveAmountY) {
+                            if (remainingDistanceY > moveAmount || remainingDistanceX > moveAmount || remainingDistanceZ > moveAmount) {
+                                if (remainingDistanceY > moveAmount) {
                                     const directionY = currentNode.targetY > currentNode.y ? 1 : -1;
-                                    currentNode.y += moveAmountY * directionY;
+                                    currentNode.y += moveAmount * directionY;
                                 }
-                                if (remainingDistanceX > moveAmountX) {
+                                if (remainingDistanceX > moveAmount) {
                                     const directionX = currentNode.targetX > currentNode.x ? 1 : -1;
-                                    currentNode.x += moveAmountX * directionX;
+                                    currentNode.x += moveAmount * directionX;
                                 }
-                                if (remainingDistanceZ > moveAmountZ) {
+                                if (remainingDistanceZ > moveAmount) {
                                     const directionZ = currentNode.targetZ > currentNode.z ? 1 : -1;
-                                    currentNode.z += moveAmountZ * directionZ;
+                                    currentNode.z += moveAmount * directionZ;
                                 }
+
                                 currentNode.mesh.position.set(currentNode.x, currentNode.y, currentNode.z);
 
                                 if (currentNode.connectionLine) {
@@ -798,10 +667,10 @@
                         }
 
                         if (currentNode) {
-                            nodePosition.x = currentNode.x || 0;
-                            nodePosition.y = currentNode.y || 0;
-                            nodePosition.z = currentNode.z || 0;
-                            nodeInfo.depth = currentNode.depth || 0;
+                            nodePosition.x = currentNode.x;
+                            nodePosition.y = currentNode.y;
+                            nodePosition.z = currentNode.z;
+                            nodeInfo.depth = currentNode.depth;
                             nodeInfo.type = currentNode.type;
                         }
                     }
