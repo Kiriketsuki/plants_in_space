@@ -65,101 +65,104 @@
 
     export class BPMDetector {
         constructor() {
-            this.bufferSize = 2048;
-            this.sampleRate = 48000;
-            this.minBPM = 30;
-            this.maxBPM = 250;
+            this.minBPM = 60;
+            this.maxBPM = 200;
             this.energyThreshold = 0.15;
-            this.historyLength = 3;
-            this.energyHistory = [];
+            this.beatHistory = [];
             this.lastBeat = 0;
-            this.beatTimes = [];
             this.currentBPM = 0;
-            this.tempoBins = new Array(300).fill(0);
+            this.tempoBins = new Array(201).fill(0); // Store tempo votes
+            this.historyLength = 2; // 2 seconds history
+            this.decayRate = 0.05; // Decay rate for tempo bins
         }
 
         analyzeEnergy(audioData) {
-            let sum = 0;
-            const relevantRange = Math.floor(audioData.length * 0.25);
-            for (let i = 0; i < relevantRange; i++) {
-                sum += (audioData[i] / 255) ** 2;
+            // Focus only on low frequencies (bass drum range)
+            const lowFreqRange = Math.floor(audioData.length * 0.1); // Look at bottom 10% of frequencies
+            let bassEnergy = 0;
+
+            // Calculate bass energy
+            for (let i = 0; i < lowFreqRange; i++) {
+                bassEnergy += (audioData[i] / 255) ** 2;
             }
-            const energy = Math.sqrt(sum / relevantRange);
+            bassEnergy = Math.sqrt(bassEnergy / lowFreqRange);
 
             const now = performance.now();
-            this.energyHistory.push({ energy, timestamp: now });
 
-            const historyDuration = this.historyLength * 1000;
-            while (this.energyHistory.length > 0 && now - this.energyHistory[0].timestamp > historyDuration) {
-                this.energyHistory.shift();
+            // Decay tempo bins
+            for (let i = 0; i < this.tempoBins.length; i++) {
+                this.tempoBins[i] *= 1 - this.decayRate;
             }
 
-            if (this.energyHistory.length > 2) {
-                const recentEnergies = this.energyHistory.slice(-3).map((e) => e.energy);
-                const averageEnergy = this.energyHistory.reduce((sum, e) => sum + e.energy, 0) / this.energyHistory.length;
-                const threshold = averageEnergy * this.energyThreshold;
+            // Keep recent beat history
+            while (this.beatHistory.length > 0 && now - this.beatHistory[0] > this.historyLength * 1000) {
+                this.beatHistory.shift();
+            }
 
-                if (recentEnergies[1] > threshold && recentEnergies[1] > recentEnergies[0] && recentEnergies[1] > recentEnergies[2] && now - this.lastBeat > 150) {
-                    this.beatTimes.push(now);
-                    this.lastBeat = now;
+            // Beat detection
+            let isBeat = false;
+            if (bassEnergy > this.energyThreshold && now - this.lastBeat > 200) {
+                isBeat = true;
+                this.lastBeat = now;
+                this.beatHistory.push(now);
 
-                    while (this.beatTimes.length > 0 && now - this.beatTimes[0] > historyDuration) {
-                        this.beatTimes.shift();
+                // Calculate intervals and update BPM
+                if (this.beatHistory.length >= 2) {
+                    const recentIntervals = [];
+                    for (let i = 1; i < this.beatHistory.length; i++) {
+                        const interval = this.beatHistory[i] - this.beatHistory[i - 1];
+                        const bpm = Math.round(60000 / interval);
+                        if (bpm >= this.minBPM && bpm <= this.maxBPM) {
+                            recentIntervals.push(bpm);
+                        }
                     }
 
-                    if (this.beatTimes.length > 1) {
-                        for (let i = 1; i < this.beatTimes.length; i++) {
-                            const interval = this.beatTimes[i] - this.beatTimes[i - 1];
-                            const bpm = Math.round(60000 / interval);
-
-                            if (bpm >= this.minBPM && bpm <= this.maxBPM) {
-                                this.tempoBins[bpm] += 1;
-
-                                let maxCount = 0;
-                                let mostLikelyTempo = 0;
-
-                                for (let j = this.minBPM; j <= this.maxBPM; j++) {
-                                    if (this.tempoBins[j] > maxCount) {
-                                        maxCount = this.tempoBins[j];
-                                        mostLikelyTempo = j;
-                                    }
-                                }
-
-                                if (maxCount > 4) {
-                                    this.currentBPM = mostLikelyTempo;
+                    if (recentIntervals.length > 0) {
+                        // Update tempo bins
+                        recentIntervals.forEach((bpm) => {
+                            // Add weight to nearby BPMs
+                            for (let i = -2; i <= 2; i++) {
+                                const binIndex = bpm + i;
+                                if (binIndex >= this.minBPM && binIndex <= this.maxBPM) {
+                                    this.tempoBins[binIndex] += 1 - Math.abs(i) * 0.1;
                                 }
                             }
+                        });
+
+                        // Find strongest tempo
+                        let maxValue = 0;
+                        let maxIndex = 0;
+                        for (let i = this.minBPM; i <= this.maxBPM; i++) {
+                            if (this.tempoBins[i] > maxValue) {
+                                maxValue = this.tempoBins[i];
+                                maxIndex = i;
+                            }
+                        }
+
+                        if (maxValue > 3) {
+                            this.currentBPM = maxIndex;
                         }
                     }
                 }
             }
 
+            // Reset if no beats for too long
+            if (now - this.lastBeat > 2000) {
+                this.currentBPM = 0;
+            }
+
+            const confidence = Math.min(1, this.beatHistory.length / 4);
+
             return {
-                energy,
+                energy: bassEnergy,
                 bpm: this.currentBPM,
-                isBeat: now - this.lastBeat < 50,
-                confidence: this.calculateConfidence(),
+                isBeat,
+                confidence,
             };
         }
 
-        calculateConfidence() {
-            if (this.beatTimes.length < 2) return 0;
-
-            const intervals = [];
-            for (let i = 1; i < this.beatTimes.length; i++) {
-                intervals.push(this.beatTimes[i] - this.beatTimes[i - 1]);
-            }
-
-            const avg = intervals.reduce((a, b) => a + b) / intervals.length;
-            const variance = intervals.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / intervals.length;
-            const stdDev = Math.sqrt(variance);
-
-            return Math.max(0, Math.min(1, 1 - stdDev / avg));
-        }
-
         reset() {
-            this.energyHistory = [];
-            this.beatTimes = [];
+            this.beatHistory = [];
             this.lastBeat = 0;
             this.currentBPM = 0;
             this.tempoBins.fill(0);
