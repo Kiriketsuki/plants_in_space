@@ -101,19 +101,23 @@
                 const sceneLight = new THREE.AmbientLight(0xffffff, 0.5);
                 scene.add(sceneLight);
 
+                // grid representing the water
+
                 const gridHelper = new THREE.GridHelper(10, 10);
                 const gridHelperMaterial = new THREE.LineBasicMaterial({ color: 0x0000ff, opacity: 0.2, transparent: true });
                 gridHelper.material = gridHelperMaterial;
                 scene.add(gridHelper);
 
+                // camera setup
+
                 const cameraTarget = new THREE.Vector3(0, 0, 0);
-                let currentRadius = 15; // Start with 15 units radius
+                let currentRadius = 10; // Start with 15 units radius
                 let rotationSpeed = 0.2; // Full rotations per second
 
                 // Set initial camera position
                 camera.position.x = currentRadius;
                 camera.position.z = 0;
-                camera.position.y = 1;
+                camera.position.y = 1.5;
                 camera.lookAt(cameraTarget);
 
                 function updateCameraPosition(time) {
@@ -124,7 +128,7 @@
                 }
 
                 function animateCameraForStalk() {
-                    const nextRadius = currentRadius + 1;
+                    const nextRadius = currentRadius + 0.5;
                     const nextHeight = camera.position.y + 1;
 
                     gsap.to(camera.position, {
@@ -150,7 +154,65 @@
                             },
                         },
                     );
+
+                    gsap.to(musicEmitter.position, {
+                        y: nextHeight - 0.5,
+                        duration: 1,
+                        ease: "power2.inOut",
+                    });
                 }
+
+                // Create music emitter
+                const musicEmitterGeometry = new THREE.SphereGeometry(0.1, 12, 12);
+                const musicEmitterMaterial = new THREE.MeshPhongMaterial({
+                    color: 0xff0000,
+                    emissive: 0xff0000,
+                    emissiveIntensity: 0.5,
+                });
+                const musicEmitter = new THREE.Mesh(musicEmitterGeometry, musicEmitterMaterial);
+                scene.add(musicEmitter);
+
+                // Music emitter animation properties
+                const musicEmitterRadius = 8;
+                let musicEmitterSpeed = 0;
+                let musicEmitterBaseSpeed = 0.00125;
+                let musicEmitterAngle = 0;
+
+                // Mouse position tracking
+                let mouseX = 0;
+
+                function updateMusicEmitterSpeed(x) {
+                    const windowWidth = window.innerWidth;
+                    const centerX = windowWidth / 2;
+                    const normalizedX = (x - centerX) / centerX; // Range: -1 to 1
+                    const absX = Math.abs(normalizedX);
+                    const direction = normalizedX < 0 ? 1 : -1;
+
+                    // Define speed zones
+                    if (absX <= 0.1) {
+                        // Center 10% - no movement
+                        musicEmitterSpeed = 0;
+                    } else if (absX <= 0.25) {
+                        // 10-25% - speed 0.75
+                        musicEmitterSpeed = 0.5 * direction * musicEmitterBaseSpeed;
+                    } else if (absX <= 0.5) {
+                        // 25-50% - speed 1.5
+                        musicEmitterSpeed = 0.75 * direction * musicEmitterBaseSpeed;
+                    } else {
+                        // 50-100% - speed 3
+                        musicEmitterSpeed = 1 * direction * musicEmitterBaseSpeed;
+                    }
+                }
+                // Add mouse move event listener
+                window.addEventListener("mousemove", (event) => {
+                    mouseX = event.clientX;
+                    updateMusicEmitterSpeed(mouseX);
+                });
+
+                // Start the music emitter animation
+                musicEmitter.position.set(musicEmitterRadius, 0, 0);
+
+                // leaf and node setup
 
                 const leafGeometry = new THREE.CircleGeometry(0.15, 32);
                 const nodeGeometry = new THREE.SphereGeometry(0.051);
@@ -183,7 +245,7 @@
                 const X_VARIANCE = 1;
                 const Z_VARIANCE = 1;
                 const ANIM_SPEED = 10;
-                const cameraInfluence = 0.1;
+                const emitterInfluence = 1;
 
                 const growthConfig = {
                     15: "root",
@@ -246,35 +308,34 @@
                     return node;
                 }
 
-                function calculateTargetPosition(parentNode, type, camera) {
+                function calculateTargetPosition(parentNode, type) {
                     let targetX, targetY, targetZ;
 
+                    // Get emitter influence direction for all types
+                    const emitterDirX = musicEmitter.position.x - parentNode.x;
+                    const emitterDirZ = musicEmitter.position.z - parentNode.z;
+                    const emitterDist = Math.sqrt(emitterDirX * emitterDirX + emitterDirZ * emitterDirZ);
+                    const emitterAngle = Math.atan2(emitterDirZ, emitterDirX);
+
                     if (type === "leaf") {
-                        const angle = Math.random() * Math.PI * 2;
+                        const randomAngle = Math.random() * Math.PI * 2;
+                        const blendedAngle = randomAngle * (1 - emitterInfluence) + emitterAngle * emitterInfluence;
                         const radius = 0.2;
-                        targetX = parentNode.x + Math.cos(angle) * radius;
+
+                        targetX = parentNode.x + Math.cos(blendedAngle) * radius;
                         targetY = parentNode.y + (Math.random() * 0.2 - 0.1);
-                        targetZ = parentNode.z + Math.sin(angle) * radius;
+                        targetZ = parentNode.z + Math.sin(blendedAngle) * radius;
                         return { x: targetX, y: targetY, z: targetZ };
                     }
 
                     switch (type) {
                         case "root": {
-                            const cameraDirX = camera.position.x - parentNode.x;
-                            const cameraDirZ = camera.position.z - parentNode.z;
-                            const cameraDist = Math.sqrt(cameraDirX * cameraDirX + cameraDirZ * cameraDirZ);
-
-                            const normalizedCameraDirX = cameraDirX / cameraDist;
-                            const normalizedCameraDirZ = cameraDirZ / cameraDist;
-
                             const randomAngle = Math.random() * 2 * Math.PI;
-                            const cameraAngle = Math.atan2(normalizedCameraDirZ, normalizedCameraDirX);
-
-                            const varianceScale = 1 - cameraInfluence;
+                            const varianceScale = 1 - emitterInfluence;
                             const baseVariance = ((Math.random() * 2 * 360) / MAX_STALK_BRANCHES - 360 / MAX_STALK_BRANCHES) * (Math.PI / 180);
                             const variance = baseVariance * varianceScale;
 
-                            const blendedAngle = randomAngle * (1 - cameraInfluence) + cameraAngle * cameraInfluence + variance;
+                            const blendedAngle = randomAngle * (1 - emitterInfluence) + emitterAngle * emitterInfluence + variance;
 
                             targetY = parentNode.y - 1;
                             targetX = parentNode.x + Math.cos(blendedAngle) * X_VARIANCE;
@@ -285,12 +346,21 @@
                             targetY = parentNode.y + 1;
 
                             if (parentNode.height === 3) {
-                                targetX = parentNode.x - 1 * firstFork;
-                                targetZ = parentNode.z + 1 * firstFork;
+                                const forkDirection = firstFork;
                                 firstFork = firstFork * -1;
+
+                                // Blend the forking direction with emitter influence
+                                const forkAngle = Math.atan2(forkDirection, -forkDirection);
+
+                                targetX = parentNode.x + Math.cos(forkAngle);
+                                targetZ = parentNode.z + Math.sin(forkAngle);
                             } else {
-                                targetX = parentNode.x + (Math.random() * 2 - 1) * (X_VARIANCE * 0.5);
-                                targetZ = parentNode.z + (Math.random() * 2 - 1) * (Z_VARIANCE * 0.5);
+                                const randomAngle = Math.random() * 2 * Math.PI;
+                                const blendedAngle = randomAngle * (1 - emitterInfluence) + emitterAngle * emitterInfluence;
+                                const variance = X_VARIANCE * 0.5;
+
+                                targetX = parentNode.x + Math.cos(blendedAngle) * variance;
+                                targetZ = parentNode.z + Math.sin(blendedAngle) * variance;
                             }
                             break;
                         }
@@ -300,14 +370,17 @@
                                 const anglePerBranch = 360 / MAX_STALK_BRANCHES;
                                 const heightRotation = parentNode.height * 30;
                                 const startAngle = heightRotation * (Math.PI / 180);
-                                const angle = branchIndex * anglePerBranch * (Math.PI / 180) + startAngle;
+                                const baseAngle = branchIndex * anglePerBranch * (Math.PI / 180) + startAngle;
+
+                                // Blend the regular branch angle with emitter influence
+                                const blendedAngle = baseAngle * (1 - emitterInfluence) + emitterAngle * emitterInfluence;
 
                                 const baseRadius = 1.0;
                                 const heightScale = 0.95;
                                 const radius = Math.pow(heightScale, parentNode.height) * baseRadius;
 
-                                targetX = parentNode.x + radius * Math.cos(angle);
-                                targetZ = parentNode.z + radius * Math.sin(angle);
+                                targetX = parentNode.x + radius * Math.cos(blendedAngle);
+                                targetZ = parentNode.z + radius * Math.sin(blendedAngle);
                                 targetY = parentNode.y + (Math.random() * 2 - 1) * 0.125;
                             } else {
                                 const stalkParent = findStalkParent(parentNode);
@@ -317,21 +390,12 @@
                                     const length = Math.sqrt(dirX * dirX + dirZ * dirZ);
 
                                     if (length > 0) {
-                                        const cameraDirX = camera.position.x - parentNode.x;
-                                        const cameraDirZ = camera.position.z - parentNode.z;
-                                        const cameraDist = Math.sqrt(cameraDirX * cameraDirX + cameraDirZ * cameraDirZ);
-
-                                        const normalizedCameraDirX = cameraDirX / cameraDist;
-                                        const normalizedCameraDirZ = cameraDirZ / cameraDist;
-
-                                        let currentCamAngle = Math.atan2(dirZ, dirX);
-                                        let cameraAngle = Math.atan2(normalizedCameraDirZ, normalizedCameraDirX);
-
-                                        const varianceScale = 1 - cameraInfluence;
+                                        let currentAngle = Math.atan2(dirZ, dirX);
+                                        const varianceScale = 1 - emitterInfluence;
                                         const baseVariance = ((Math.random() * 2 * 360) / MAX_STALK_BRANCHES - 360 / MAX_STALK_BRANCHES) * (Math.PI / 180);
                                         const variance = baseVariance * varianceScale;
 
-                                        const blendedAngle = currentCamAngle * (1 - cameraInfluence) + cameraAngle * cameraInfluence + variance;
+                                        const blendedAngle = currentAngle * (1 - emitterInfluence) + emitterAngle * emitterInfluence + variance;
 
                                         const baseLength = 1.0;
                                         const heightScale = 0.95;
@@ -340,12 +404,16 @@
                                         targetX = parentNode.x + Math.cos(blendedAngle) * growthLength;
                                         targetZ = parentNode.z + Math.sin(blendedAngle) * growthLength;
                                     } else {
-                                        targetX = parentNode.x + 1;
-                                        targetZ = parentNode.z;
+                                        const randomAngle = Math.random() * 2 * Math.PI;
+                                        const blendedAngle = randomAngle * (1 - emitterInfluence) + emitterAngle * emitterInfluence;
+                                        targetX = parentNode.x + Math.cos(blendedAngle);
+                                        targetZ = parentNode.z + Math.sin(blendedAngle);
                                     }
                                 } else {
-                                    targetX = parentNode.x + 0.5;
-                                    targetZ = parentNode.z;
+                                    const randomAngle = Math.random() * 2 * Math.PI;
+                                    const blendedAngle = randomAngle * (1 - emitterInfluence) + emitterAngle * emitterInfluence;
+                                    targetX = parentNode.x + Math.cos(blendedAngle) * 0.5;
+                                    targetZ = parentNode.z + Math.sin(blendedAngle) * 0.5;
                                 }
                                 targetY = parentNode.y + (Math.random() * 2 - 1) * 0.25;
                             }
@@ -620,10 +688,15 @@
                 function animate(time) {
                     requestAnimationFrame(animate);
                     // controls.update();
-                    updateCameraPosition(time/10000);
+                    updateCameraPosition(time / 25000);
 
                     const deltaTime = time - elapsedTime;
                     elapsedTime = time;
+
+                    // Smoothly update music emitter position
+                    musicEmitterAngle += musicEmitterSpeed * deltaTime;
+                    musicEmitter.position.x = Math.cos(musicEmitterAngle) * musicEmitterRadius;
+                    musicEmitter.position.z = Math.sin(musicEmitterAngle) * musicEmitterRadius;
 
                     const maxIndex = Math.max(...Object.keys(growthConfig).map(Number));
 
