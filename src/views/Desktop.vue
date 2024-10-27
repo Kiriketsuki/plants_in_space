@@ -231,7 +231,8 @@
 
     function initializeSocket() {
         // const url = `http://${window.location.hostname}:3000`;
-        const url = "wss://us-central1-plants-in-space.cloudfunctions.net/app/";
+        // const url = "wss://us-central1-plants-in-space.cloudfunctions.net/app/";
+        const url = "https://plants-in-space-socket.onrender.com";
         connectionStatus.value = "Connecting";
         resetState();
 
