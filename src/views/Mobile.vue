@@ -90,7 +90,7 @@
                             </div>
                             <button
                                 @click="selectSong(track)"
-                                :disabled="selectedSongs.length >= 2 || isSelected(track.id)"
+                                :disabled="selectedSongs.length >= 5 || isSelected(track.id)"
                                 class="px-3 py-1 bg-green-500 text-white rounded-md disabled:bg-gray-300 hover:bg-green-600 transition-colors">
                                 {{ isSelected(track.id) ? "Selected" : "Select" }}
                             </button>
@@ -100,31 +100,77 @@
 
                 <!-- Selected Songs -->
                 <div v-if="selectedSongs.length > 0">
-                    <h3 class="text-lg font-semibold mb-2">Selected Songs ({{ selectedSongs.length }}/2)</h3>
+                    <h3 class="text-lg font-semibold mb-2">Selected Songs ({{ selectedSongs.length }}/5)</h3>
                     <div class="space-y-2">
                         <div
                             v-for="song in selectedSongs"
                             :key="song.id"
-                            class="flex items-center justify-between p-3 bg-gray-50 rounded border">
-                            <div class="flex items-center space-x-3">
-                                <img
-                                    :src="song.album.images[song.album.images.length - 1]?.url"
-                                    class="w-12 h-12 object-cover rounded"
-                                    alt="Album art" />
-                                <div>
-                                    <p class="font-medium">{{ song.name }}</p>
-                                    <p class="text-sm text-gray-600">
-                                        {{ song.artists.map((a) => a.name).join(", ") }}
-                                    </p>
+                            class="flex flex-col p-3 bg-gray-50 rounded border">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <img
+                                        :src="song.album.images[song.album.images.length - 1]?.url"
+                                        class="w-12 h-12 object-cover rounded"
+                                        alt="Album art" />
+                                    <div>
+                                        <p class="font-medium">{{ song.name }}</p>
+                                        <p class="text-sm text-gray-600">
+                                            {{ song.artists.map((a) => a.name).join(", ") }}
+                                        </p>
+                                    </div>
                                 </div>
+                                <button
+                                    @click="removeSong(song.id)"
+                                    class="px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors">
+                                    Remove
+                                </button>
                             </div>
-                            <button
-                                @click="removeSong(song.id)"
-                                class="px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors">
-                                Remove
-                            </button>
+                            <!-- Distribution slider -->
+                            <div
+                                v-if="selectedSongs.length > 1"
+                                class="mt-2">
+                                <label class="text-sm text-gray-600">Distribution: {{ songDistributions[song.id] || 0 }}%</label>
+                                <input
+                                    type="range"
+                                    v-model.number="songDistributions[song.id]"
+                                    @input="updateDistributions($event, song.id)"
+                                    min="0"
+                                    max="100"
+                                    step="1"
+                                    class="w-full" />
+                            </div>
                         </div>
                     </div>
+                    <!-- Distribution Total Warning -->
+                    <div
+                        v-if="selectedSongs.length > 1"
+                        class="mt-2 text-sm"
+                        :class="{ 'text-red-500': !isDistributionValid, 'text-green-500': isDistributionValid }">
+                        Total Distribution: {{ totalDistribution }}% (Must equal 100%)
+                    </div>
+                </div>
+
+                <!-- Growth Time Selection -->
+                <div class="mt-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Select Plant Growth Time</label>
+                    <select
+                        v-model="growthTime"
+                        class="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500">
+                        <option value="120">2 minutes</option>
+                        <option value="150">2.5 minutes</option>
+                        <option value="180">3 minutes</option>
+                        <option value="210">3.5 minutes</option>
+                        <option value="240">4 minutes</option>
+                    </select>
+                </div>
+
+                <div class="mt-6">
+                    <button
+                        @click="startGrowth"
+                        :disabled="!canStart"
+                        class="w-full py-3 bg-green-500 text-white rounded-lg font-semibold disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-green-600 transition-colors">
+                        Start Plant Growth
+                    </button>
                 </div>
 
                 <!-- Playback Controls -->
@@ -261,7 +307,7 @@
 </template>
 
 <script setup>
-    import { ref, onMounted, onUnmounted, watch } from "vue";
+    import { ref, onMounted, onUnmounted, watch, computed } from "vue";
     import { io } from "socket.io-client";
     import { SPOTIFY_CLIENT_ID } from "../../secrets.js";
     import { useRoute, useRouter } from "vue-router";
@@ -280,6 +326,10 @@
     const musicVolume = ref(50);
     const previousVolume = ref(50);
 
+    const growthTime = ref("120");
+    const songDistributions = ref({});
+    const isDistributionValid = ref(false);
+
     let socket;
     let searchTimeout;
 
@@ -289,7 +339,26 @@
             socket.emit("update-songs", {
                 roomId: props.id,
                 songs: newSongs,
+                distributions: songDistributions.value,
             });
+        }
+
+        // Reset distributions when songs change
+        if (newSongs.length === 1) {
+            songDistributions.value = { [newSongs[0].id]: 100 };
+            isDistributionValid.value = true;
+        } else if (newSongs.length > 1) {
+            // Initialize even distribution
+            const evenShare = Math.floor(100 / newSongs.length);
+            const remainder = 100 - evenShare * newSongs.length;
+            songDistributions.value = newSongs.reduce((acc, song, index) => {
+                acc[song.id] = evenShare + (index === 0 ? remainder : 0);
+                return acc;
+            }, {});
+            validateDistribution();
+        } else {
+            songDistributions.value = {};
+            isDistributionValid.value = false;
         }
     });
 
@@ -302,6 +371,14 @@
         }
     });
 
+    // Computed properties
+    const totalDistribution = computed(() => {
+        return Object.values(songDistributions.value).reduce((sum, value) => sum + value, 0);
+    });
+
+    const canStart = computed(() => {
+        return selectedSongs.value.length > 0 && selectedSongs.value.length <= 5 && (selectedSongs.value.length === 1 || isDistributionValid.value);
+    });
     function getRedirectUri() {
         const protocol = "http://";
         const hostname = window.location.hostname;
@@ -444,14 +521,147 @@
         searchTimeout = setTimeout(searchSpotify, 300);
     }
 
+    function updateDistributions(event, changedSongId) {
+        const newValue = parseInt(event.target.value);
+        const oldValue = songDistributions.value[changedSongId];
+        const totalChange = newValue - oldValue;
+
+        // If trying to decrease, just proceed
+        if (totalChange <= 0) {
+            const newDistributions = { ...songDistributions.value };
+            newDistributions[changedSongId] = newValue;
+
+            // Distribute the change evenly among other songs
+            const otherSongIds = selectedSongs.value.map((song) => song.id).filter((id) => id !== changedSongId);
+
+            const changePerSong = -totalChange / otherSongIds.length;
+            otherSongIds.forEach((id) => {
+                newDistributions[id] = Math.round((songDistributions.value[id] + changePerSong) * 10) / 10;
+            });
+
+            songDistributions.value = newDistributions;
+            validateDistribution();
+            return;
+        }
+
+        // For increases, we need to be smarter about distribution
+        const otherSongIds = selectedSongs.value.map((song) => song.id).filter((id) => id !== changedSongId);
+
+        // Create new distribution object
+        const newDistributions = { ...songDistributions.value };
+        newDistributions[changedSongId] = newValue;
+
+        let remainingChange = totalChange;
+        let previousChange = -1;
+
+        // Keep trying to distribute until we can't change anymore
+        while (remainingChange > 0 && remainingChange !== previousChange) {
+            previousChange = remainingChange;
+
+            // Get songs that still have room to decrease
+            const availableSongs = otherSongIds.filter((id) => newDistributions[id] > 0);
+
+            if (availableSongs.length === 0) {
+                // No songs can be decreased further
+                event.target.value = oldValue;
+                return;
+            }
+
+            // Calculate how much each available song should change
+            const changePerSong = remainingChange / availableSongs.length;
+
+            remainingChange = 0;
+
+            availableSongs.forEach((id) => {
+                const currentValue = newDistributions[id];
+                const targetChange = Math.min(changePerSong, currentValue);
+                const actualChange = Math.round(targetChange * 10) / 10;
+
+                newDistributions[id] = Math.max(0, currentValue - actualChange);
+                remainingChange += changePerSong - actualChange;
+            });
+        }
+
+        // If we couldn't distribute all changes, revert
+        if (remainingChange > 0) {
+            event.target.value = oldValue;
+            return;
+        }
+
+        // Adjust for rounding errors to ensure total is exactly 100
+        const total = Object.values(newDistributions).reduce((sum, val) => sum + val, 0);
+        if (Math.abs(total - 100) > 0.01) {
+            const availableSongs = otherSongIds.filter((id) => newDistributions[id] > 0);
+            if (availableSongs.length > 0) {
+                const roundingError = (100 - total) / availableSongs.length;
+                availableSongs.forEach((id) => {
+                    newDistributions[id] = Math.round((newDistributions[id] + roundingError) * 10) / 10;
+                });
+            }
+        }
+
+        songDistributions.value = newDistributions;
+        validateDistribution();
+    }
+
+    function validateDistribution() {
+        const total = totalDistribution.value;
+        isDistributionValid.value = total === 100;
+    }
+
     function selectSong(track) {
-        if (selectedSongs.value.length < 2 && !isSelected(track.id)) {
-            selectedSongs.value = [...selectedSongs.value, track];
+        if (selectedSongs.value.length < 5 && !isSelected(track.id)) {
+            const newSelectedSongs = [...selectedSongs.value, track];
+            selectedSongs.value = newSelectedSongs;
+
+            // Set even distribution for all songs
+            const evenShare = Math.floor(1000 / newSelectedSongs.length) / 10; // Using 1000 for one decimal precision
+            songDistributions.value = newSelectedSongs.reduce((acc, song) => {
+                acc[song.id] = evenShare;
+                return acc;
+            }, {});
+
+            // Adjust for rounding errors
+            const total = Object.values(songDistributions.value).reduce((sum, val) => sum + val, 0);
+            if (Math.abs(total - 100) > 0.01) {
+                const roundingError = (100 - total) / newSelectedSongs.length;
+                songDistributions.value = newSelectedSongs.reduce((acc, song) => {
+                    acc[song.id] = Math.round((evenShare + roundingError) * 10) / 10;
+                    return acc;
+                }, {});
+            }
+
+            validateDistribution();
         }
     }
 
     function removeSong(songId) {
-        selectedSongs.value = selectedSongs.value.filter((song) => song.id !== songId);
+        const remainingSongs = selectedSongs.value.filter((song) => song.id !== songId);
+        selectedSongs.value = remainingSongs;
+
+        if (remainingSongs.length > 1) {
+            const evenShare = Math.floor(1000 / remainingSongs.length) / 10;
+            songDistributions.value = remainingSongs.reduce((acc, song) => {
+                acc[song.id] = evenShare;
+                return acc;
+            }, {});
+
+            // Adjust for rounding errors
+            const total = Object.values(songDistributions.value).reduce((sum, val) => sum + val, 0);
+            if (Math.abs(total - 100) > 0.01) {
+                const roundingError = (100 - total) / remainingSongs.length;
+                songDistributions.value = remainingSongs.reduce((acc, song) => {
+                    acc[song.id] = Math.round((evenShare + roundingError) * 10) / 10;
+                    return acc;
+                }, {});
+            }
+        } else if (remainingSongs.length === 1) {
+            songDistributions.value = { [remainingSongs[0].id]: 100 };
+        } else {
+            songDistributions.value = {};
+        }
+
+        validateDistribution();
     }
 
     function isSelected(trackId) {
@@ -488,7 +698,6 @@
     }
 
     function resetState() {
-        // Reset all state variables to initial values
         searchResults.value = [];
         searchQuery.value = "";
         error.value = "";
@@ -497,6 +706,9 @@
         selectedSongs.value = [];
         musicVolume.value = 50;
         previousVolume.value = 50;
+        growthTime.value = "120";
+        songDistributions.value = {};
+        isDistributionValid.value = false;
     }
 
     onMounted(() => {
