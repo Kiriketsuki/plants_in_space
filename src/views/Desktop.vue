@@ -1,5 +1,5 @@
 <template>
-    <div class="min-h-screen bg-gray-900 p-4">
+    <div class="max-h-screen overflow-hidden bg-gray-900 p-4">
         <!-- Connection Status -->
         <div class="absolute top-4 right-4 z-50">
             <div class="p-3 bg-gray-800 rounded text-sm text-white">
@@ -383,6 +383,12 @@
     async function initializePlayer(token) {
         if (!token) return;
 
+        if (playerStatus.value === "Active") {
+            console.log("Player already active, skipping initialization");
+            clearTimeout(initializationTimer);
+            return;
+        }
+
         clearTimeout(initializationTimer);
 
         if (initializationAttempts.value >= MAX_INITIALIZATION_ATTEMPTS) {
@@ -399,6 +405,14 @@
                 script.id = "spotify-player";
                 script.src = "https://sdk.scdn.co/spotify-player.js";
                 document.body.appendChild(script);
+            } else {
+                // delete and re-add the script to re-trigger the load
+                const script = document.getElementById("spotify-player");
+                script.remove();
+                const newScript = document.createElement("script");
+                newScript.id = "spotify-player";
+                newScript.src = "https://sdk.scdn.co/spotify-player.js";
+                document.body.appendChild(newScript);
             }
 
             window.onSpotifyWebPlaybackSDKReady = () => {
