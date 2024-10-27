@@ -3,6 +3,8 @@ import { createRouter, createWebHistory } from "vue-router";
 // Implement lazy loading for better performance
 const Home = () => import("../views/Home.vue");
 const Audio = () => import("../views/Audio.vue");
+const Desktop = () => import("../views/Desktop.vue");
+const Mobile = () => import("../views/Mobile.vue");
 
 const routes = [
     {
@@ -19,6 +21,24 @@ const routes = [
         component: Audio,
         meta: {
             title: "Audio",
+        },
+    },
+    {
+        path: "/desktop/:id",
+        name: "desktop",
+        component: Desktop,
+        props: true,
+        meta: {
+            title: "Desktop",
+        },
+    },
+    {
+        path: "/mobile/:id",
+        name: "mobile",
+        component: Mobile,
+        props: true,
+        meta: {
+            title: "Mobile",
         },
     },
 ];
