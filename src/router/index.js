@@ -5,6 +5,7 @@ const Home = () => import("../views/Home.vue");
 const Audio = () => import("../views/Audio.vue");
 const Desktop = () => import("../views/Desktop.vue");
 const Mobile = () => import("../views/Mobile.vue");
+const SpotifyRedirect = () => import("../views/SpotifyRedirect.vue");
 
 const routes = [
     {
@@ -40,6 +41,11 @@ const routes = [
         meta: {
             title: "Mobile",
         },
+    },
+    {
+        path: "/mobile/redirect",
+        name: "spotify-redirect",
+        component: SpotifyRedirect,
     },
 ];
 
