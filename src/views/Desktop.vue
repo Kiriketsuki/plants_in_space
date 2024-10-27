@@ -291,10 +291,31 @@
                 }
             }
 
-            if (isPlaying.value) {
-                await pausePlayback();
-            } else {
-                await playCurrentSong();
+            try {
+                const state = await player.value.getCurrentState();
+                const currentSpotifyTrack = state?.track_window?.current_track;
+                const desiredTrack = selectedSongs.value[currentSong.value];
+
+                // Check if we need to start a new song
+                const needsNewSong = !currentSpotifyTrack || currentSpotifyTrack.uri !== desiredTrack.uri;
+
+                if (needsNewSong) {
+                    // Wrong song or no song playing, start the correct one
+                    await playCurrentSong();
+                } else if (state.paused) {
+                    // Correct song is loaded but paused, resume playback
+                    await player.value.resume();
+                    isPlaying.value = true;
+                    updatePlaybackStatus();
+                } else {
+                    // Correct song is playing, pause it
+                    await player.value.pause();
+                    isPlaying.value = false;
+                    updatePlaybackStatus();
+                }
+            } catch (err) {
+                error.value = `Playback control error: ${err.message}`;
+                console.error("Playback control error:", err);
             }
         });
 
@@ -302,15 +323,23 @@
         socket.on("next-song", async () => {
             if (selectedSongs.value.length === 0) return;
 
-            if (isPlaying.value) {
-                await pausePlayback();
-            }
+            try {
+                if (isPlaying.value) {
+                    await stopPlayback();
+                }
 
-            // Loop to the beginning if at the end
-            if (currentSong.value >= selectedSongs.value.length - 1) {
-                currentSong.value = 0;
-            } else {
-                currentSong.value++;
+                // Loop to the beginning if at the end
+                if (currentSong.value >= selectedSongs.value.length - 1) {
+                    currentSong.value = 0;
+                } else {
+                    currentSong.value++;
+                }
+                updatePlaybackStatus();
+
+                // Play the next song
+                await playCurrentSong();
+            } catch (err) {
+                error.value = `Error switching to next track: ${err.message}`;
             }
         });
 
@@ -318,15 +347,23 @@
         socket.on("previous-song", async () => {
             if (selectedSongs.value.length === 0) return;
 
-            if (isPlaying.value) {
-                await pausePlayback();
-            }
+            try {
+                if (isPlaying.value) {
+                    await stopPlayback();
+                }
 
-            // Loop to the end if at the beginning
-            if (currentSong.value <= 0) {
-                currentSong.value = selectedSongs.value.length - 1;
-            } else {
-                currentSong.value--;
+                // Loop to the end if at the beginning
+                if (currentSong.value <= 0) {
+                    currentSong.value = selectedSongs.value.length - 1;
+                } else {
+                    currentSong.value--;
+                }
+                updatePlaybackStatus();
+
+                // Play the previous song
+                await playCurrentSong();
+            } catch (err) {
+                error.value = `Error switching to previous track: ${err.message}`;
             }
         });
 
@@ -402,9 +439,17 @@
                 });
 
                 // Playback status updates
-                spotifyPlayer.addListener("player_state_changed", (state) => {
+                spotifyPlayer.addListener("player_state_changed", async (state) => {
                     if (state) {
                         isPlaying.value = !state.paused;
+
+                        // Verify the current track whenever the state changes
+                        const isCorrectTrack = await verifyCurrentTrack();
+                        if (!isCorrectTrack && isPlaying.value) {
+                            // If wrong track is playing, switch to the correct one
+                            await playCurrentSong();
+                        }
+
                         updatePlaybackStatus(state);
                     }
                 });
@@ -488,6 +533,16 @@
         }
     }
 
+    async function verifyCurrentTrack() {
+        const state = await player.value.getCurrentState();
+        if (!state) return false;
+
+        const currentSpotifyTrack = state.track_window?.current_track;
+        const desiredTrack = selectedSongs.value[currentSong.value];
+
+        return currentSpotifyTrack && desiredTrack && currentSpotifyTrack.uri === desiredTrack.uri;
+    }
+
     async function playCurrentSong() {
         if (!selectedSongs.value[currentSong.value] || !player.value) return;
 
@@ -501,107 +556,44 @@
 
         try {
             await player.value.setVolume(musicVolume.value / 100);
-            await playTracks([selectedSongs.value[currentSong.value].uri]);
+            const songToPlay = selectedSongs.value[currentSong.value];
+
+            await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId.value}`, {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${spotifyToken.value}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    uris: [songToPlay.uri],
+                    position_ms: 0,
+                }),
+            });
+
             isPlaying.value = true;
+            updatePlaybackStatus();
         } catch (err) {
             error.value = `Playback error: ${err.message}`;
+            console.error("Playback error details:", err);
         }
     }
 
-    async function playTracks(uris) {
-        if (!deviceId.value) return;
-
-        const response = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId.value}`, {
-            method: "PUT",
-            headers: {
-                Authorization: `Bearer ${spotifyToken.value}`,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ uris }),
-        });
-
-        if (!response.ok && response.status !== 204) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        isPlaying.value = true;
-    }
-
-    async function playSong(uri) {
-        if (!player.value || !deviceId.value) return;
-
-        if (!hasAutoplayPermission.value) {
-            const granted = await requestAutoplayPermission();
-            if (!granted) {
-                error.value = "Please enable audio playback to play music";
-                return;
-            }
-        }
+    async function stopPlayback() {
+        if (!deviceId.value || !player.value) return;
 
         try {
-            const songIndex = selectedSongs.value.findIndex((song) => song.uri === uri);
-            if (songIndex !== -1) {
-                currentSong.value = songIndex;
-                await playCurrentSong();
-            }
+            await player.value.pause();
+            await fetch(`https://api.spotify.com/v1/me/player/seek?device_id=${deviceId.value}&position_ms=0`, {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${spotifyToken.value}`,
+                },
+            });
+
+            isPlaying.value = false;
+            updatePlaybackStatus();
         } catch (err) {
-            error.value = `Playback error: ${err.message}`;
-        }
-    }
-
-    async function resumePlayback() {
-        if (!deviceId.value) return;
-        await playCurrentSong();
-    }
-
-    async function pausePlayback() {
-        if (!deviceId.value) return;
-
-        const response = await fetch(`https://api.spotify.com/v1/me/player/pause?device_id=${deviceId.value}`, {
-            method: "PUT",
-            headers: {
-                Authorization: `Bearer ${spotifyToken.value}`,
-            },
-        });
-
-        if (!response.ok && response.status !== 204) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        isPlaying.value = false;
-    }
-
-    async function nextTrack() {
-        if (selectedSongs.value.length === 0) return;
-
-        if (isPlaying.value) {
-            await pausePlayback();
-        }
-
-        if (currentSong.value >= selectedSongs.value.length - 1) {
-            currentSong.value = 0;
-        } else {
-            currentSong.value++;
-        }
-    }
-
-    async function previousTrack() {
-        if (selectedSongs.value.length === 0) return;
-
-        if (isPlaying.value) {
-            await pausePlayback();
-        }
-
-        if (currentSong.value <= 0) {
-            currentSong.value = selectedSongs.value.length - 1;
-        } else {
-            currentSong.value--;
-        }
-    }
-
-    function togglePlay() {
-        if (isPlaying.value) {
-            pausePlayback();
-        } else {
-            playCurrentSong();
+            throw new Error(`Stop failed: ${err.message}`);
         }
     }
 
