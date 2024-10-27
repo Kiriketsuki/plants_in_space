@@ -390,7 +390,8 @@
     const SPOTIFY_SCOPES = ["streaming", "user-read-email", "user-read-private"].join(" ");
 
     function initializeSocket() {
-        const url = `http://${window.location.hostname}:3000`;
+        // const url = `http://${window.location.hostname}:3000`;
+        const url = "wss://us-central1-plants-in-space.cloudfunctions.net/app/";
         connectionStatus.value = "Connecting";
 
         if (socket) {
