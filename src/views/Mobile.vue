@@ -3,7 +3,7 @@
         <div class="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
             <h2 class="text-2xl font-bold mb-4">Music Control (Room: {{ id }})</h2>
 
-            <!-- Enhanced Connection Status -->
+            <!-- Connection Status -->
             <div class="mb-4 space-y-2">
                 <div class="p-3 bg-gray-50 rounded text-sm">
                     <p>
@@ -19,8 +19,6 @@
                     </p>
                     <p>Socket ID: {{ socketId || "Not connected" }}</p>
                     <p>Room ID: {{ id }}</p>
-                    <p>Server URL: {{ serverUrl }}</p>
-                    <p>Redirect URI: {{ SPOTIFY_REDIRECT_URI }}</p>
                 </div>
 
                 <div
@@ -35,11 +33,6 @@
                         @click="reconnect"
                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
                         Reconnect
-                    </button>
-                    <button
-                        @click="checkConnection"
-                        class="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600">
-                        Check Status
                     </button>
                 </div>
             </div>
@@ -90,7 +83,9 @@
                                     alt="Album art" />
                                 <div>
                                     <p class="font-medium">{{ track.name }}</p>
-                                    <p class="text-sm text-gray-600">{{ track.artists.map((a) => a.name).join(", ") }}</p>
+                                    <p class="text-sm text-gray-600">
+                                        {{ track.artists.map((a) => a.name).join(", ") }}
+                                    </p>
                                 </div>
                             </div>
                             <button
@@ -118,7 +113,9 @@
                                     alt="Album art" />
                                 <div>
                                     <p class="font-medium">{{ song.name }}</p>
-                                    <p class="text-sm text-gray-600">{{ song.artists.map((a) => a.name).join(", ") }}</p>
+                                    <p class="text-sm text-gray-600">
+                                        {{ song.artists.map((a) => a.name).join(", ") }}
+                                    </p>
                                 </div>
                             </div>
                             <button
@@ -132,32 +129,16 @@
 
                 <!-- Playback Controls -->
                 <div
-                    v-if="spotifyToken && selectedSongs.length > 0"
+                    v-if="selectedSongs.length > 0"
                     class="mt-8 bg-gray-800 rounded-lg p-4">
                     <h3 class="text-lg font-semibold text-white mb-4">Playback Controls</h3>
-
-                    <!-- Currently Playing -->
-                    <div
-                        v-if="currentlyPlaying"
-                        class="mb-4 p-3 bg-gray-700 rounded-lg">
-                        <div class="flex items-center space-x-3">
-                            <img
-                                :src="currentlyPlaying.album?.images[0]?.url"
-                                class="w-12 h-12 rounded"
-                                alt="Now playing" />
-                            <div>
-                                <p class="text-white font-medium">{{ currentlyPlaying.name }}</p>
-                                <p class="text-gray-400 text-sm">{{ currentlyPlaying.artists?.map((a) => a.name).join(", ") }}</p>
-                            </div>
-                        </div>
-                    </div>
 
                     <!-- Controls -->
                     <div class="flex flex-col space-y-4">
                         <!-- Main Controls -->
                         <div class="flex justify-center items-center space-x-6">
                             <button
-                                @click="sendPlaybackCommand('previous')"
+                                @click="previousSong"
                                 class="p-2 text-white hover:text-green-400 transition-colors">
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
@@ -174,10 +155,9 @@
                             </button>
 
                             <button
-                                @click="togglePlay"
+                                @click="togglePlayback"
                                 class="p-3 bg-green-500 rounded-full text-white hover:bg-green-600 transition-colors">
                                 <svg
-                                    v-if="!isPlaying"
                                     xmlns="http://www.w3.org/2000/svg"
                                     class="h-8 w-8"
                                     fill="none"
@@ -189,23 +169,10 @@
                                         stroke-width="2"
                                         d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                                 </svg>
-                                <svg
-                                    v-else
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    class="h-8 w-8"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
                             </button>
 
                             <button
-                                @click="sendPlaybackCommand('next')"
+                                @click="nextSong"
                                 class="p-2 text-white hover:text-green-400 transition-colors">
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
@@ -228,7 +195,7 @@
                                 @click="toggleMute"
                                 class="p-2 text-white hover:text-green-400 transition-colors">
                                 <svg
-                                    v-if="volume > 0"
+                                    v-if="musicVolume > 0"
                                     xmlns="http://www.w3.org/2000/svg"
                                     class="h-6 w-6"
                                     fill="none"
@@ -265,12 +232,11 @@
                                 min="0"
                                 max="100"
                                 step="1"
-                                v-model="volume"
-                                @change="updateVolume"
+                                v-model="musicVolume"
                                 class="flex-1 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer" />
 
                             <span class="text-white text-sm w-8">
-                                {{ volume }}
+                                {{ musicVolume }}
                             </span>
                         </div>
                     </div>
@@ -295,7 +261,7 @@
 </template>
 
 <script setup>
-    import { ref, computed, onMounted, onUnmounted } from "vue";
+    import { ref, onMounted, onUnmounted, watch } from "vue";
     import { io } from "socket.io-client";
     import { SPOTIFY_CLIENT_ID } from "../../secrets.js";
     import { useRoute, useRouter } from "vue-router";
@@ -306,19 +272,35 @@
     const error = ref("");
     const connectionStatus = ref("Disconnected");
     const socketId = ref(null);
-    const serverUrl = ref("");
     const spotifyToken = ref(null);
     const searchQuery = ref("");
     const searchResults = ref([]);
     const selectedSongs = ref([]);
     const isLoading = ref(false);
-    const currentlyPlaying = ref(null);
-    const isPlaying = ref(false);
-    const volume = ref(50);
+    const musicVolume = ref(50);
     const previousVolume = ref(50);
 
     let socket;
     let searchTimeout;
+
+    // Watchers for state changes
+    watch(selectedSongs, (newSongs) => {
+        if (socket && socket.connected) {
+            socket.emit("update-songs", {
+                roomId: props.id,
+                songs: newSongs,
+            });
+        }
+    });
+
+    watch(musicVolume, (newVolume) => {
+        if (socket && socket.connected) {
+            socket.emit("update-volume", {
+                roomId: props.id,
+                volume: newVolume,
+            });
+        }
+    });
 
     function getRedirectUri() {
         const protocol = "http://";
@@ -328,12 +310,10 @@
     }
 
     const SPOTIFY_REDIRECT_URI = getRedirectUri();
-    const SPOTIFY_SCOPES = ["streaming", "user-read-email", "user-read-private", "user-read-playback-state", "user-modify-playback-state", "user-read-currently-playing"].join(" ");
+    const SPOTIFY_SCOPES = ["streaming", "user-read-email", "user-read-private"].join(" ");
 
-    // Update the initializeSocket function:
     function initializeSocket() {
-        const url = getServerUrl();
-        serverUrl.value = url;
+        const url = `http://${window.location.hostname}:3000`;
         connectionStatus.value = "Connecting";
 
         if (socket) {
@@ -359,78 +339,35 @@
             error.value = `Connection error: ${err.message}`;
             connectionStatus.value = "Disconnected";
             socketId.value = null;
+            resetState();
         });
 
         socket.on("disconnect", () => {
             connectionStatus.value = "Disconnected";
             socketId.value = null;
+            resetState();
         });
 
         socket.on("error", (err) => {
             error.value = `Socket error: ${err.message}`;
         });
 
-        socket.on("initial-state", (state) => {
-            if (state.selectedSongs) {
-                selectedSongs.value = state.selectedSongs;
-            }
-            if (state.spotifyToken) {
-                spotifyToken.value = state.spotifyToken;
-            }
+        socket.on("get-client-type", () => {
+            socket.emit("client-type-response", "mobile");
         });
 
-        socket.on("songs-updated", ({ songs }) => {
-            selectedSongs.value = songs;
-        });
-
-        socket.on("playback-status", ({ isPlaying: playing, currentTrack, volume: newVolume }) => {
-            isPlaying.value = playing;
-            if (currentTrack) {
-                currentlyPlaying.value = currentTrack;
-            }
-            if (typeof newVolume === "number") {
-                volume.value = newVolume;
-            }
+        socket.on("desktop-disconnected", () => {
+            resetState();
+            error.value = "Desktop client disconnected. Please wait for reconnection.";
         });
 
         return socket;
     }
 
-    function getServerUrl() {
-        const hostname = window.location.hostname;
-        return `http://${hostname}:3000`;
-    }
-
     function reconnect() {
         error.value = "";
-        if (socket) {
-            socket.disconnect();
-        }
         resetState();
         socket = initializeSocket();
-    }
-
-    async function checkConnection() {
-        if (!socket) {
-            error.value = "Socket not initialized";
-            return;
-        }
-
-        console.log("Connection check:", {
-            connected: socket.connected,
-            id: socket.id,
-            url: socket.io.uri,
-        });
-
-        try {
-            const start = Date.now();
-            await fetch(getServerUrl());
-            const latency = Date.now() - start;
-            console.log("Server reachable. Latency:", latency, "ms");
-        } catch (err) {
-            console.error("Server unreachable:", err);
-            error.value = `Server unreachable: ${err.message}`;
-        }
     }
 
     function loginToSpotify() {
@@ -509,85 +446,57 @@
 
     function selectSong(track) {
         if (selectedSongs.value.length < 2 && !isSelected(track.id)) {
-            socket.emit("select-song", { roomId: props.id, song: track });
+            selectedSongs.value = [...selectedSongs.value, track];
         }
     }
 
     function removeSong(songId) {
-        socket.emit("remove-song", { roomId: props.id, songId });
+        selectedSongs.value = selectedSongs.value.filter((song) => song.id !== songId);
     }
 
     function isSelected(trackId) {
         return selectedSongs.value.some((song) => song.id === trackId);
     }
 
-    function sendPlaybackCommand(command, data = {}) {
-        console.log("Sending command:", command, "Current playing state:", isPlaying.value);
-
-        if (command === "play") {
-            socket.emit("playback-command", {
-                roomId: props.id,
-                command: "play",
-                data: {
-                    ...(!currentlyPlaying.value && selectedSongs.value.length > 0 ? { uris: selectedSongs.value.map((song) => song.uri) } : {}),
-                    currentTrack: currentlyPlaying.value, // Include current track info
-                },
-            });
-        } else if (command === "pause") {
-            socket.emit("playback-command", {
-                roomId: props.id,
-                command: "pause",
-                data: {
-                    currentTrack: currentlyPlaying.value, // Include current track info
-                },
-            });
-        } else {
-            socket.emit("playback-command", {
-                roomId: props.id,
-                command,
-                data: {
-                    ...data,
-                    currentTrack: currentlyPlaying.value, // Include current track info
-                },
-            });
+    // Playback control functions
+    function togglePlayback() {
+        if (socket && socket.connected) {
+            console.log("Toggling playback");
+            socket.emit("toggle-playback", { roomId: props.id });
         }
     }
 
-    function togglePlay() {
-        if (isPlaying.value) {
-            sendPlaybackCommand("pause");
-        } else {
-            sendPlaybackCommand("play", {
-                currentTrack: currentlyPlaying.value,
-            });
+    function nextSong() {
+        if (socket && socket.connected) {
+            socket.emit("next-song", { roomId: props.id });
+        }
+    }
+
+    function previousSong() {
+        if (socket && socket.connected) {
+            socket.emit("previous-song", { roomId: props.id });
         }
     }
 
     function toggleMute() {
-        if (volume.value > 0) {
-            previousVolume.value = volume.value;
-            volume.value = 0;
+        if (musicVolume.value > 0) {
+            previousVolume.value = musicVolume.value;
+            musicVolume.value = 0;
         } else {
-            volume.value = previousVolume.value;
+            musicVolume.value = previousVolume.value;
         }
-        updateVolume();
-    }
-
-    function updateVolume() {
-        sendPlaybackCommand("volume", { volume: volume.value });
     }
 
     function resetState() {
-        currentlyPlaying.value = null;
-        isPlaying.value = false;
-        selectedSongs.value = [];
-        volume.value = 50;
-        previousVolume.value = 50;
+        // Reset all state variables to initial values
         searchResults.value = [];
         searchQuery.value = "";
         error.value = "";
         spotifyToken.value = null;
         socketId.value = null;
+        selectedSongs.value = [];
+        musicVolume.value = 50;
+        previousVolume.value = 50;
     }
 
     onMounted(() => {

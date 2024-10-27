@@ -24,19 +24,34 @@ const port = 3000;
 
 class Room {
     constructor() {
-        this.clients = new Set();
+        this.mobileClient = null;
+        this.desktopClient = null;
         this.lastActivity = Date.now();
         this.spotifyToken = null;
         this.selectedSongs = [];
     }
 
-    addClient(socketId) {
-        this.clients.add(socketId);
+    setMobileClient(socketId) {
+        this.mobileClient = socketId;
         this.lastActivity = Date.now();
     }
 
-    removeClient(socketId) {
-        this.clients.delete(socketId);
+    setDesktopClient(socketId) {
+        this.desktopClient = socketId;
+        this.lastActivity = Date.now();
+    }
+
+    removeMobileClient(socketId) {
+        if (this.mobileClient === socketId) {
+            this.mobileClient = null;
+        }
+        this.lastActivity = Date.now();
+    }
+
+    removeDesktopClient(socketId) {
+        if (this.desktopClient === socketId) {
+            this.desktopClient = null;
+        }
         this.lastActivity = Date.now();
     }
 
@@ -44,16 +59,20 @@ class Room {
         this.spotifyToken = token;
     }
 
-    addSelectedSong(song) {
-        if (this.selectedSongs.length < 2) {
-            this.selectedSongs.push(song);
-            return true;
-        }
-        return false;
+    updateSelectedSongs(songs) {
+        this.selectedSongs = songs;
     }
 
-    removeSelectedSong(songId) {
-        this.selectedSongs = this.selectedSongs.filter((song) => song.id !== songId);
+    isMobileClient(socketId) {
+        return this.mobileClient === socketId;
+    }
+
+    isDesktopClient(socketId) {
+        return this.desktopClient === socketId;
+    }
+
+    hasClient(socketId) {
+        return this.mobileClient === socketId || this.desktopClient === socketId;
     }
 
     reset() {
@@ -62,23 +81,42 @@ class Room {
         this.lastActivity = Date.now();
     }
 
-    get clientCount() {
-        return this.clients.size;
+    get isComplete() {
+        return this.mobileClient && this.desktopClient;
     }
 }
 
 const rooms = new Map();
+const pendingAssignments = new Map();
 
 io.on("connection", (socket) => {
     console.log("Client connected:", socket.id);
     let currentRoom = null;
 
     socket.on("join-room", (roomId) => {
-        console.log(`Client ${socket.id} joining room: ${roomId}`);
+        console.log(`Client ${socket.id} requesting to join room: ${roomId}`);
+
+        // Store the room ID temporarily
+        pendingAssignments.set(socket.id, {
+            roomId,
+            assigned: false,
+        });
+
+        // Request client type
+        socket.emit("get-client-type");
+    });
+
+    socket.on("client-type-response", (clientType) => {
+        console.log(`Received client type for ${socket.id}: ${clientType}`);
+
+        const pending = pendingAssignments.get(socket.id);
+        if (!pending || pending.assigned) return;
+
+        const roomId = pending.roomId;
 
         if (currentRoom) {
             console.log(`Client ${socket.id} leaving current room: ${currentRoom}`);
-            leaveRoom(socket, currentRoom);
+            leaveRoom(socket, currentRoom, clientType);
         }
 
         currentRoom = roomId;
@@ -90,14 +128,21 @@ io.on("connection", (socket) => {
         }
 
         const room = rooms.get(roomId);
-        room.addClient(socket.id);
-        console.log(`Room ${roomId} now has ${room.clientCount} client(s)`);
+        if (clientType === "mobile") {
+            room.setMobileClient(socket.id);
+        } else {
+            room.setDesktopClient(socket.id);
+        }
+
+        pending.assigned = true;
 
         // Send current state to the newly connected client
         socket.emit("initial-state", {
             spotifyToken: room.spotifyToken,
             selectedSongs: room.selectedSongs,
         });
+
+        console.log(`Room ${roomId} status - Mobile: ${room.mobileClient}, Desktop: ${room.desktopClient}`);
     });
 
     socket.on("spotify-token", ({ roomId, token }) => {
@@ -109,64 +154,110 @@ io.on("connection", (socket) => {
         }
     });
 
-    socket.on("select-song", ({ roomId, song }) => {
-        console.log(`Song selection for room ${roomId}: ${song.name} by ${song.artists[0].name}`);
+    socket.on("update-songs", ({ roomId, songs }) => {
+        console.log(`Updating songs for room ${roomId}`);
         const room = rooms.get(roomId);
-        if (room) {
-            if (room.addSelectedSong(song)) {
-                io.to(roomId).emit("songs-updated", { songs: room.selectedSongs });
-                console.log(`Room ${roomId} now has ${room.selectedSongs.length} song(s)`);
-            }
-        }
-    });
-
-    socket.on("remove-song", ({ roomId, songId }) => {
-        console.log(`Removing song ${songId} from room ${roomId}`);
-        const room = rooms.get(roomId);
-        if (room) {
-            room.removeSelectedSong(songId);
+        if (room && room.isMobileClient(socket.id)) {
+            room.updateSelectedSongs(songs);
             io.to(roomId).emit("songs-updated", { songs: room.selectedSongs });
-            console.log(`Room ${roomId} now has ${room.selectedSongs.length} song(s)`);
         }
     });
 
-    socket.on("playback-command", ({ roomId, command, data }) => {
-        console.log(`Playback command received - Room: ${roomId}, Command: ${command}`);
-        if (command === "status") {
-            console.log("Current playback status:", {
-                isPlaying: data.isPlaying,
-                track: data.currentTrack?.name,
-                volume: data.volume,
-            });
+    socket.on("update-volume", ({ roomId, volume }) => {
+        const room = rooms.get(roomId);
+        if (room && room.isMobileClient(socket.id)) {
+            io.to(roomId).emit("volume-updated", { volume });
         }
+    });
 
-        // Broadcast command to other clients
-        socket.to(roomId).emit("playback-update", { command, data });
+    socket.on("toggle-playback", ({ roomId }) => {
+        console.log(`Received playback toggle request for room ${roomId}`);
+        const room = rooms.get(roomId);
+        if (room && room.isMobileClient(socket.id)) {
+            io.to(roomId).emit("toggle-playback");
+        }
+    });
 
-        // For status updates, broadcast to all clients including sender
-        if (command === "status") {
-            io.to(roomId).emit("playback-status", data);
+    socket.on("next-song", ({ roomId }) => {
+        const room = rooms.get(roomId);
+        if (room && room.isMobileClient(socket.id)) {
+            io.to(roomId).emit("next-song");
+        }
+    });
+
+    socket.on("previous-song", ({ roomId }) => {
+        const room = rooms.get(roomId);
+        if (room && room.isMobileClient(socket.id)) {
+            io.to(roomId).emit("previous-song");
         }
     });
 
     socket.on("disconnect", () => {
         console.log(`Client disconnected: ${socket.id}`);
+        pendingAssignments.delete(socket.id);
+
         if (currentRoom) {
-            leaveRoom(socket, currentRoom);
+            const room = rooms.get(currentRoom);
+            if (room) {
+                const isMobile = room.isMobileClient(socket.id);
+                leaveRoom(socket, currentRoom, isMobile ? "mobile" : "desktop");
+
+                // If it's a desktop client, ensure we clean up Spotify tokens
+                if (!isMobile) {
+                    room.spotifyToken = null;
+                    console.log(`Cleared Spotify token for room ${currentRoom}`);
+                }
+            }
         }
     });
 });
+
+function leaveRoom(socket, roomId, clientType) {
+    console.log(`Client ${socket.id} leaving room ${roomId}`);
+    const room = rooms.get(roomId);
+    if (room) {
+        if (clientType === "mobile") {
+            room.removeMobileClient(socket.id);
+            if (room.desktopClient) {
+                io.to(room.desktopClient).emit("mobile-disconnected");
+            }
+        } else {
+            room.removeDesktopClient(socket.id);
+            // Clear Spotify token when desktop leaves
+            room.spotifyToken = null;
+            if (room.mobileClient) {
+                io.to(room.mobileClient).emit("desktop-disconnected");
+            }
+        }
+
+        socket.leave(roomId);
+        console.log(`Room ${roomId} status after leave - Mobile: ${room.mobileClient}, Desktop: ${room.desktopClient}`);
+
+        // If room is empty, clean it up after a delay
+        if (!room.mobileClient && !room.desktopClient) {
+            setTimeout(() => {
+                const currentRoom = rooms.get(roomId);
+                if (currentRoom && !currentRoom.mobileClient && !currentRoom.desktopClient) {
+                    rooms.delete(roomId); // Remove the room completely
+                    console.log(`Room ${roomId} has been deleted due to inactivity`);
+                }
+            }, 5000);
+        }
+    }
+}
 
 app.get("/api/rooms/:roomId/status", (req, res) => {
     const room = rooms.get(req.params.roomId);
     if (room) {
         console.log(`Status request for room ${req.params.roomId}:`, {
-            clientCount: room.clientCount,
+            hasDesktop: !!room.desktopClient,
+            hasMobile: !!room.mobileClient,
             hasSpotifyToken: !!room.spotifyToken,
             selectedSongsCount: room.selectedSongs.length,
         });
         res.json({
-            clientCount: room.clientCount,
+            hasDesktop: !!room.desktopClient,
+            hasMobile: !!room.mobileClient,
             hasSpotifyToken: !!room.spotifyToken,
             selectedSongsCount: room.selectedSongs.length,
         });
@@ -175,26 +266,6 @@ app.get("/api/rooms/:roomId/status", (req, res) => {
         res.status(404).json({ error: "Room not found" });
     }
 });
-
-function leaveRoom(socket, roomId) {
-    console.log(`Client ${socket.id} leaving room ${roomId}`);
-    const room = rooms.get(roomId);
-    if (room) {
-        room.removeClient(socket.id);
-        socket.leave(roomId);
-        console.log(`Room ${roomId} now has ${room.clientCount} client(s)`);
-
-        if (room.clientCount === 0) {
-            setTimeout(() => {
-                const room = rooms.get(roomId);
-                if (room && room.clientCount === 0) {
-                    room.reset();
-                    console.log(`Room ${roomId} has been reset due to inactivity`);
-                }
-            }, 5000);
-        }
-    }
-}
 
 http.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);

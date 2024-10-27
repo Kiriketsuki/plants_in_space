@@ -56,12 +56,13 @@
                         No songs selected yet
                     </div>
 
+                    <!-- Song List -->
                     <div class="space-y-6">
                         <div
                             v-for="(song, index) in selectedSongs"
                             :key="song.id"
-                            class="bg-gray-700 rounded-lg overflow-hidden">
-                            <!-- Song Info -->
+                            class="bg-gray-700 rounded-lg overflow-hidden"
+                            :class="{ 'border-2 border-green-500': currentSong === index }">
                             <div class="p-4 flex items-center justify-between">
                                 <div class="flex items-center space-x-4">
                                     <img
@@ -70,47 +71,43 @@
                                         alt="Album art" />
                                     <div>
                                         <h3 class="text-white font-bold">{{ song.name }}</h3>
-                                        <p class="text-gray-400">{{ song.artists.map((a) => a.name).join(", ") }}</p>
+                                        <p class="text-gray-400">
+                                            {{ song.artists.map((a) => a.name).join(", ") }}
+                                        </p>
                                     </div>
                                 </div>
-                                <button
-                                    v-if="player && deviceId"
-                                    @click="playSong(song.uri)"
-                                    class="px-4 py-2 bg-green-500 text-white rounded-full hover:bg-green-600">
-                                    Play
-                                </button>
                             </div>
                         </div>
                     </div>
-
-                    <!-- Player Controls -->
-                    <div
-                        v-if="player && selectedSongs.length > 0"
-                        class="mt-6 flex justify-center space-x-4">
-                        <button
-                            @click="previousTrack"
-                            class="p-2 bg-gray-700 rounded-full text-white hover:bg-gray-600">
-                            Previous
-                        </button>
-                        <button
-                            @click="togglePlay"
-                            class="p-2 bg-green-500 rounded-full text-white hover:bg-green-600">
-                            {{ isPlaying ? "Pause" : "Play" }}
-                        </button>
-                        <button
-                            @click="nextTrack"
-                            class="p-2 bg-gray-700 rounded-full text-white hover:bg-gray-600">
-                            Next
-                        </button>
-                    </div>
                 </div>
+            </div>
+        </div>
+
+        <div
+            v-if="showPermissionDialog"
+            class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-gray-800 p-6 rounded-lg shadow-xl max-w-md">
+                <h3 class="text-xl font-bold text-white mb-4">Enable Audio Playback</h3>
+                <p class="text-gray-300 mb-6">To play music, we need your permission to enable audio playback. Please click the button below to enable playback.</p>
+                <button
+                    @click="
+                        async () => {
+                            await requestAutoplayPermission();
+                            if (hasAutoplayPermission.value) {
+                                showPermissionDialog.value = false;
+                            }
+                        }
+                    "
+                    class="w-full bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 transition-colors">
+                    Enable Audio
+                </button>
             </div>
         </div>
     </div>
 </template>
 
 <script setup>
-    import { ref, onMounted, onUnmounted } from "vue";
+    import { ref, onMounted, onUnmounted, onBeforeUnmount } from "vue";
     import { io } from "socket.io-client";
 
     const props = defineProps(["id"]);
@@ -122,19 +119,114 @@
     const playerStatus = ref("Not initialized");
     const isPlaying = ref(false);
     const deviceId = ref(null);
+    const currentSong = ref(0);
+    const musicVolume = ref(50);
+    const initializationAttempts = ref(0);
+    const MAX_INITIALIZATION_ATTEMPTS = 5;
+    const RETRY_DELAY = 3000; // 3 seconds
+    let initializationTimer = null;
+
+    // for autoplay
+    const hasAutoplayPermission = ref(false);
+    const showPermissionDialog = ref(false);
+
+    // Add this function to request permission
+    async function requestAutoplayPermission() {
+        showPermissionDialog.value = true;
+        return new Promise((resolve) => {
+            // Create a valid silent audio context instead of using an audio element
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            // Set the gain to 0 (silent)
+            gainNode.gain.value = 0;
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            // Start and immediately stop to test autoplay
+            try {
+                oscillator.start(0);
+                oscillator.stop(0.001);
+                hasAutoplayPermission.value = true;
+                showPermissionDialog.value = false;
+                resolve(true);
+            } catch (error) {
+                console.log("Autoplay not allowed:", error);
+                hasAutoplayPermission.value = false;
+                resolve(false);
+            }
+
+            // Cleanup
+            setTimeout(() => {
+                audioContext.close();
+            }, 1000);
+        });
+    }
 
     let socket;
     const mobileUrl = `${window.location.origin}/mobile/${props.id}`;
 
-    function resetState() {
-        error.value = "";
-        connectionStatus.value = "Disconnected";
+    function resetState(fullReset = true) {
+        if (fullReset) {
+            clearAllStorageAndTokens();
+        } else {
+            error.value = "";
+            spotifyToken.value = null;
+            selectedSongs.value = [];
+            player.value = null;
+            playerStatus.value = "Not initialized";
+            isPlaying.value = false;
+            deviceId.value = null;
+            currentSong.value = 0;
+            initializationAttempts.value = 0;
+            clearTimeout(initializationTimer);
+        }
+    }
+
+    // Add this function near the top of your script
+    function clearAllStorageAndTokens() {
+        // Clear any local storage items if you're using them
+        localStorage.removeItem("spotify_token");
+        localStorage.removeItem("device_id");
+        sessionStorage.clear();
+
+        // Clear all refs
         spotifyToken.value = null;
-        selectedSongs.value = [];
         player.value = null;
-        playerStatus.value = "Not initialized";
-        isPlaying.value = false;
         deviceId.value = null;
+        selectedSongs.value = [];
+        currentSong.value = 0;
+        isPlaying.value = false;
+        musicVolume.value = 50;
+        error.value = "";
+        playerStatus.value = "Not initialized";
+        connectionStatus.value = "Disconnected";
+        initializationAttempts.value = 0;
+
+        // Clear any pending timers
+        clearTimeout(initializationTimer);
+    }
+
+    function resetPlaybackState() {
+        if (isPlaying.value) {
+            pausePlayback();
+        }
+        currentSong.value = 0;
+        isPlaying.value = false;
+    }
+
+    function retryInitialization(token) {
+        console.log(`Retry attempt ${initializationAttempts.value + 1} of ${MAX_INITIALIZATION_ATTEMPTS}`);
+        initializationAttempts.value++;
+
+        if (initializationAttempts.value < MAX_INITIALIZATION_ATTEMPTS) {
+            console.log(`Retrying initialization in ${RETRY_DELAY / 1000} seconds...`);
+            clearTimeout(initializationTimer);
+            initializationTimer = setTimeout(() => {
+                initializePlayer(token);
+            }, RETRY_DELAY);
+        }
     }
 
     function initializeSocket() {
@@ -159,14 +251,83 @@
             resetState();
         });
 
+        socket.on("get-client-type", () => {
+            socket.emit("client-type-response", "desktop");
+        });
+
+        socket.on("mobile-disconnected", () => {
+            error.value = "Mobile client disconnected";
+            resetState();
+        });
+
         socket.on("spotify-token-updated", async ({ token }) => {
             console.log("Received Spotify token");
             spotifyToken.value = token;
+            connectionStatus.value = "Connected";
             await initializePlayer(token);
         });
 
-        socket.on("songs-updated", ({ songs }) => {
+        socket.on("songs-updated", async ({ songs }) => {
+            if (isPlaying.value) {
+                await pausePlayback();
+            }
+            resetPlaybackState();
             selectedSongs.value = songs;
+        });
+
+        socket.on("volume-updated", ({ volume }) => {
+            musicVolume.value = volume;
+            if (player.value) {
+                player.value.setVolume(volume / 100);
+            }
+        });
+
+        socket.on("toggle-playback", async () => {
+            if (!hasAutoplayPermission.value) {
+                const granted = await requestAutoplayPermission();
+                if (!granted) {
+                    error.value = "Please enable audio playback to play music";
+                    return;
+                }
+            }
+
+            if (isPlaying.value) {
+                await pausePlayback();
+            } else {
+                await playCurrentSong();
+            }
+        });
+
+        // Update the next song handler
+        socket.on("next-song", async () => {
+            if (selectedSongs.value.length === 0) return;
+
+            if (isPlaying.value) {
+                await pausePlayback();
+            }
+
+            // Loop to the beginning if at the end
+            if (currentSong.value >= selectedSongs.value.length - 1) {
+                currentSong.value = 0;
+            } else {
+                currentSong.value++;
+            }
+        });
+
+        // Update the previous song handler
+        socket.on("previous-song", async () => {
+            if (selectedSongs.value.length === 0) return;
+
+            if (isPlaying.value) {
+                await pausePlayback();
+            }
+
+            // Loop to the end if at the beginning
+            if (currentSong.value <= 0) {
+                currentSong.value = selectedSongs.value.length - 1;
+            } else {
+                currentSong.value--;
+            }
         });
 
         socket.on("initial-state", async (state) => {
@@ -179,131 +340,130 @@
             }
         });
 
-        socket.on("playback-update", async ({ command, data }) => {
-            if (!player.value || !deviceId.value) return;
-
-            try {
-                console.log("Received playback command:", command, data);
-
-                // Preserve current track information
-                const currentTrack = data.currentTrack || (await getCurrentTrackInfo());
-
-                switch (command) {
-                    case "play":
-                        if (data.uris) {
-                            await playTracks(data.uris);
-                        } else {
-                            await resumePlayback();
-                        }
-                        break;
-
-                    case "pause":
-                        await pausePlayback();
-                        break;
-
-                    case "next":
-                        await nextTrack();
-                        break;
-
-                    case "previous":
-                        await previousTrack();
-                        break;
-
-                    case "volume":
-                        await player.value.setVolume(data.volume / 100);
-                        break;
-                }
-
-                // Update status with preserved track information
-                await updatePlaybackStatus({
-                    paused: command === "pause",
-                    track_window: {
-                        current_track: currentTrack,
-                    },
-                    device: {
-                        volume_percent: data.volume || (await player.value.getVolume()) * 100,
-                    },
-                });
-            } catch (err) {
-                error.value = `Playback command error: ${err.message}`;
-            }
-        });
-
         return socket;
     }
 
     async function initializePlayer(token) {
         if (!token) return;
 
-        if (!document.getElementById("spotify-player")) {
-            const script = document.createElement("script");
-            script.id = "spotify-player";
-            script.src = "https://sdk.scdn.co/spotify-player.js";
-            document.body.appendChild(script);
+        clearTimeout(initializationTimer);
+
+        if (initializationAttempts.value >= MAX_INITIALIZATION_ATTEMPTS) {
+            error.value = "Failed to initialize Spotify player after multiple attempts";
+            playerStatus.value = "Failed";
+            return;
         }
 
-        window.onSpotifyWebPlaybackSDKReady = () => {
-            const spotifyPlayer = new window.Spotify.Player({
-                name: "Plant Music Player",
-                getOAuthToken: (cb) => {
-                    cb(token);
-                },
-            });
+        try {
+            playerStatus.value = "Initializing";
 
-            // Error handling
-            spotifyPlayer.addListener("initialization_error", ({ message }) => {
-                error.value = `Player Init Error: ${message}`;
-            });
+            if (!document.getElementById("spotify-player")) {
+                const script = document.createElement("script");
+                script.id = "spotify-player";
+                script.src = "https://sdk.scdn.co/spotify-player.js";
+                document.body.appendChild(script);
+            }
 
-            spotifyPlayer.addListener("authentication_error", ({ message }) => {
-                error.value = `Player Auth Error: ${message}`;
-            });
+            window.onSpotifyWebPlaybackSDKReady = () => {
+                playerStatus.value = "SDK Ready";
+                const spotifyPlayer = new window.Spotify.Player({
+                    name: "Plant Music Player",
+                    getOAuthToken: (cb) => {
+                        cb(token);
+                    },
+                    volume: musicVolume.value / 100,
+                });
 
-            spotifyPlayer.addListener("account_error", ({ message }) => {
-                error.value = `Premium Account Required: ${message}`;
-            });
+                // Error handling
+                spotifyPlayer.addListener("initialization_error", ({ message }) => {
+                    error.value = `Player Init Error: ${message}`;
+                    playerStatus.value = "Initialization Error";
+                    retryInitialization(token);
+                });
 
-            spotifyPlayer.addListener("playback_error", ({ message }) => {
-                error.value = `Playback Error: ${message}`;
-            });
+                spotifyPlayer.addListener("authentication_error", ({ message }) => {
+                    error.value = `Player Auth Error: ${message}`;
+                    playerStatus.value = "Authentication Error";
+                    retryInitialization(token);
+                });
 
-            // Playback status updates
-            spotifyPlayer.addListener("player_state_changed", (state) => {
-                if (state) {
-                    isPlaying.value = !state.paused;
-                    updatePlaybackStatus(state);
+                spotifyPlayer.addListener("account_error", ({ message }) => {
+                    error.value = `Premium Account Required: ${message}`;
+                    playerStatus.value = "Account Error";
+                    // Don't retry for account errors as they're likely permanent
+                });
 
-                    // Log the state for debugging
-                    console.log("Player state changed:", {
-                        track: state.track_window?.current_track?.name,
-                        artists: state.track_window?.current_track?.artists?.map((a) => a.name).join(", "),
-                        isPlaying: !state.paused,
+                spotifyPlayer.addListener("playback_error", ({ message }) => {
+                    error.value = `Playback Error: ${message}`;
+                    if (!player.value || playerStatus.value !== "Active") {
+                        playerStatus.value = "Playback Error";
+                        retryInitialization(token);
+                    }
+                });
+
+                // Playback status updates
+                spotifyPlayer.addListener("player_state_changed", (state) => {
+                    if (state) {
+                        isPlaying.value = !state.paused;
+                        updatePlaybackStatus(state);
+                    }
+                });
+
+                // Ready
+                spotifyPlayer.addListener("ready", async ({ device_id }) => {
+                    console.log("Spotify player ready");
+                    playerStatus.value = "Ready";
+                    player.value = spotifyPlayer;
+                    deviceId.value = device_id;
+                    initializationAttempts.value = 0;
+
+                    try {
+                        // Request permission when device is ready
+                        if (!hasAutoplayPermission.value) {
+                            await requestAutoplayPermission();
+                        }
+
+                        playerStatus.value = "Transferring Playback";
+                        await transferPlayback(device_id);
+                        playerStatus.value = "Active";
+                        console.log("Player is now active");
+                    } catch (err) {
+                        error.value = `Failed to transfer playback: ${err.message}`;
+                        playerStatus.value = "Transfer Failed";
+                        retryInitialization(token);
+                    }
+                });
+
+                // Not Ready
+                spotifyPlayer.addListener("not_ready", ({ device_id }) => {
+                    console.log("Spotify player not ready");
+                    playerStatus.value = "Not Ready";
+                    deviceId.value = null;
+                    retryInitialization(token);
+                });
+
+                console.log("Attempting to connect Spotify player");
+                playerStatus.value = "Connecting";
+                spotifyPlayer
+                    .connect()
+                    .then((success) => {
+                        if (!success) {
+                            console.log("Failed to connect to Spotify");
+                            playerStatus.value = "Connection Failed";
+                            retryInitialization(token);
+                        }
+                    })
+                    .catch((error) => {
+                        console.error("Error connecting to Spotify:", error);
+                        playerStatus.value = "Connection Error";
+                        retryInitialization(token);
                     });
-                }
-            });
-
-            // Ready
-            spotifyPlayer.addListener("ready", async ({ device_id }) => {
-                playerStatus.value = "Ready";
-                player.value = spotifyPlayer;
-                deviceId.value = device_id;
-
-                try {
-                    await transferPlayback(device_id);
-                    playerStatus.value = "Active";
-                } catch (err) {
-                    error.value = `Failed to transfer playback: ${err.message}`;
-                }
-            });
-
-            // Not Ready
-            spotifyPlayer.addListener("not_ready", ({ device_id }) => {
-                playerStatus.value = "Not Ready";
-                deviceId.value = null;
-            });
-
-            spotifyPlayer.connect();
-        };
+            };
+        } catch (err) {
+            console.error("Error in initializePlayer:", err);
+            playerStatus.value = "Initialization Error";
+            retryInitialization(token);
+        }
     }
 
     async function transferPlayback(device_id) {
@@ -328,6 +488,26 @@
         }
     }
 
+    async function playCurrentSong() {
+        if (!selectedSongs.value[currentSong.value] || !player.value) return;
+
+        if (!hasAutoplayPermission.value) {
+            const granted = await requestAutoplayPermission();
+            if (!granted) {
+                error.value = "Please enable audio playback to play music";
+                return;
+            }
+        }
+
+        try {
+            await player.value.setVolume(musicVolume.value / 100);
+            await playTracks([selectedSongs.value[currentSong.value].uri]);
+            isPlaying.value = true;
+        } catch (err) {
+            error.value = `Playback error: ${err.message}`;
+        }
+    }
+
     async function playTracks(uris) {
         if (!deviceId.value) return;
 
@@ -349,11 +529,20 @@
     async function playSong(uri) {
         if (!player.value || !deviceId.value) return;
 
+        if (!hasAutoplayPermission.value) {
+            const granted = await requestAutoplayPermission();
+            if (!granted) {
+                error.value = "Please enable audio playback to play music";
+                return;
+            }
+        }
+
         try {
-            await playTracks([uri]);
-            // Get the current state after playing
-            const state = await player.value.getCurrentState();
-            updatePlaybackStatus(state);
+            const songIndex = selectedSongs.value.findIndex((song) => song.uri === uri);
+            if (songIndex !== -1) {
+                currentSong.value = songIndex;
+                await playCurrentSong();
+            }
         } catch (err) {
             error.value = `Playback error: ${err.message}`;
         }
@@ -361,18 +550,7 @@
 
     async function resumePlayback() {
         if (!deviceId.value) return;
-
-        const response = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId.value}`, {
-            method: "PUT",
-            headers: {
-                Authorization: `Bearer ${spotifyToken.value}`,
-            },
-        });
-
-        if (!response.ok && response.status !== 204) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        isPlaying.value = true;
+        await playCurrentSong();
     }
 
     async function pausePlayback() {
@@ -392,32 +570,38 @@
     }
 
     async function nextTrack() {
-        if (!deviceId.value) return;
+        if (selectedSongs.value.length === 0) return;
 
-        await fetch(`https://api.spotify.com/v1/me/player/next?device_id=${deviceId.value}`, {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${spotifyToken.value}`,
-            },
-        });
+        if (isPlaying.value) {
+            await pausePlayback();
+        }
+
+        if (currentSong.value >= selectedSongs.value.length - 1) {
+            currentSong.value = 0;
+        } else {
+            currentSong.value++;
+        }
     }
 
     async function previousTrack() {
-        if (!deviceId.value) return;
+        if (selectedSongs.value.length === 0) return;
 
-        await fetch(`https://api.spotify.com/v1/me/player/previous?device_id=${deviceId.value}`, {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${spotifyToken.value}`,
-            },
-        });
+        if (isPlaying.value) {
+            await pausePlayback();
+        }
+
+        if (currentSong.value <= 0) {
+            currentSong.value = selectedSongs.value.length - 1;
+        } else {
+            currentSong.value--;
+        }
     }
 
     function togglePlay() {
         if (isPlaying.value) {
             pausePlayback();
         } else {
-            resumePlayback();
+            playCurrentSong();
         }
     }
 
@@ -439,7 +623,6 @@
         }
     }
 
-    // Update the updatePlaybackStatus function:
     function updatePlaybackStatus(state = null) {
         if (!socket) return;
 
@@ -448,14 +631,16 @@
             statusData = {
                 isPlaying: !state.paused,
                 currentTrack: state.track_window?.current_track || null,
-                volume: state.device?.volume_percent || 50,
+                volume: state.device?.volume_percent || musicVolume.value,
+                currentSong: currentSong.value,
             };
         } else {
             getCurrentTrackInfo().then((trackInfo) => {
                 statusData = {
                     isPlaying: isPlaying.value,
                     currentTrack: trackInfo,
-                    volume: player.value?.getVolume() * 100 || 50,
+                    volume: musicVolume.value,
+                    currentSong: currentSong.value,
                 };
 
                 socket.emit("playback-command", {
@@ -477,6 +662,11 @@
     onMounted(() => {
         resetState();
         socket = initializeSocket();
+        window.addEventListener("beforeunload", clearAllStorageAndTokens);
+    });
+
+    onBeforeUnmount(() => {
+        window.removeEventListener("beforeunload", clearAllStorageAndTokens);
     });
 
     onUnmounted(() => {
@@ -486,6 +676,14 @@
         if (player.value) {
             player.value.disconnect();
         }
+        clearTimeout(initializationTimer);
         resetState();
     });
 </script>
+
+<style scoped>
+    button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+</style>
