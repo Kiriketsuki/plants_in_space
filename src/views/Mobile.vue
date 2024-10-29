@@ -130,6 +130,11 @@
                                 v-if="selectedSongs.length > 1"
                                 class="mt-2">
                                 <label class="text-sm text-gray-600">Distribution: {{ songDistributions[song.id] || 0 }}%</label>
+                                <label class="text-sm text-gray-600">
+                                  Total Duration: 
+                                  {{ Math.floor((songDistributions[song.id] * growthTime) / 100) }}s 
+                                  {{ (((songDistributions[song.id] * growthTime) % 100) * 10).toFixed(0) }}ms
+                                </label>
                                 <input
                                     type="range"
                                     v-model.number="songDistributions[song.id]"
@@ -639,7 +644,6 @@
                 growthTime: parseInt(growthTime.value),
                 distributions: songDistributions.value,
             });
-
         } else {
             error.value = "Not connected to server. Please try reconnecting.";
         }
