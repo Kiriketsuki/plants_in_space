@@ -698,7 +698,7 @@
                     cleanupPlaylist();
                     socket.emit("playlist-completed", { roomId: props.id });
                 }
-            }, 1000); // Check every second
+            }, 100); // Check every second
         } catch (error) {
             console.error("Error in playPlaylist:", error);
             error.value = `Playlist playback error: ${error.message}`;
