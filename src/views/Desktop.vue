@@ -1,5 +1,5 @@
 <template>
-    <div class="max-h-screen overflow-hidden bg-gray-900 p-4">
+    <div class="max-h-screen overflow-x-hidden bg-gray-900 p-4">
         <!-- Connection Status -->
         <div class="absolute top-4 right-4 z-50">
             <div class="p-3 bg-gray-800 rounded text-sm text-white">
@@ -61,7 +61,7 @@
                         <div
                             v-for="(song, index) in selectedSongs"
                             :key="song.id"
-                            class="bg-gray-700 rounded-lg overflow-hidden"
+                            class="bg-gray-700 rounded-lg overflow-x-hidden"
                             :class="{ 'border-2 border-green-500': currentSong === index }">
                             <div class="p-4 flex items-center justify-between">
                                 <div class="flex items-center space-x-4">
@@ -75,6 +75,82 @@
                                             {{ song.artists.map((a) => a.name).join(", ") }}
                                         </p>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Growth Information -->
+                    <div
+                        v-if="growthActive && spotifyToken"
+                        class="mt-6 bg-gray-800 rounded-lg p-6">
+                        <h2 class="text-2xl font-bold mb-6 text-white">Growth Settings</h2>
+
+                        <div class="space-y-4">
+                            <div class="bg-gray-700 rounded-lg p-4">
+                                <h3 class="text-lg font-semibold text-white mb-2">Total Growth Time</h3>
+                                <p class="text-gray-300">{{ growthTime }} seconds ({{ totalGrowthTimeMs.toLocaleString() }}ms)</p>
+                            </div>
+
+                            <div class="bg-gray-700 rounded-lg p-4">
+                                <h3 class="text-lg font-semibold text-white mb-2">Song Playlist</h3>
+                                <div class="space-y-3">
+                                    <div
+                                        v-for="(item, index) in songPlaylist"
+                                        :key="item.song.id"
+                                        class="bg-gray-600 rounded-lg p-3">
+                                        <div class="flex justify-between items-center">
+                                            <div class="text-white">
+                                                <p class="font-medium">{{ item.song.name }}</p>
+                                                <p class="text-sm text-gray-300">by {{ item.song.artists.map((a) => a.name).join(", ") }}</p>
+                                            </div>
+                                            <div class="text-right">
+                                                <p class="text-green-400 font-medium">{{ item.distribution }}%</p>
+                                                <p class="text-sm text-gray-300">{{ (item.duration / 1000).toFixed(1) }}s</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Total Verification -->
+                            <div class="bg-gray-700 rounded-lg p-4">
+                                <h3 class="text-lg font-semibold text-white mb-2">Verification</h3>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <p class="text-gray-300">Total Distribution:</p>
+                                        <p class="text-white font-medium">{{ songPlaylist.reduce((sum, item) => sum + item.distribution, 0) }}%</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-gray-300">Total Duration:</p>
+                                        <p class="text-white font-medium">{{ (songPlaylist.reduce((sum, item) => sum + item.duration, 0) / 1000).toFixed(1) }}s</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-700 rounded-lg p-4 mt-4">
+                                <h3 class="text-lg font-semibold text-white mb-2">Playlist Status</h3>
+                                <div class="flex items-center space-x-2">
+                                    <div
+                                        class="w-3 h-3 rounded-full"
+                                        :class="{
+                                            'bg-green-500 animate-pulse': playlistActive,
+                                            'bg-gray-500': !playlistActive,
+                                        }"></div>
+                                    <p class="text-white">
+                                        {{ playlistActive ? "Playing" : "Stopped" }}
+                                    </p>
+                                </div>
+                                <div
+                                    v-if="playlistActive && currentSong !== null"
+                                    class="mt-2">
+                                    <p class="text-gray-300">
+                                        Currently playing:
+                                        <span class="text-white">
+                                            {{ songPlaylist[currentSong]?.song.name }}
+                                        </span>
+                                    </p>
+                                    <p class="text-gray-400 text-sm">Duration: {{ (songPlaylist[currentSong]?.duration / 1000).toFixed(1) }}s</p>
                                 </div>
                             </div>
                         </div>
@@ -113,17 +189,34 @@
     const props = defineProps(["id"]);
     const error = ref("");
     const connectionStatus = ref("Disconnected");
-    const spotifyToken = ref(null);
     const selectedSongs = ref([]);
+
+    // music player
     const player = ref(null);
     const playerStatus = ref("Not initialized");
     const isPlaying = ref(false);
     const deviceId = ref(null);
     const currentSong = ref(0);
     const musicVolume = ref(50);
+
+    // connection to spotify
+    const spotifyToken = ref(null);
     const initializationAttempts = ref(0);
     const MAX_INITIALIZATION_ATTEMPTS = 5;
     const RETRY_DELAY = 3000; // 3 seconds
+
+    // growth settings
+    const growthTime = ref(null);
+    const distributions = ref({});
+    const growthActive = ref(false);
+    const totalGrowthTimeMs = ref(0);
+
+    // playlist controls
+    const songPlaylist = ref([]);
+    const playlistActive = ref(false);
+    const playlistStartTime = ref(null);
+    const playlistInterval = ref(null);
+
     let initializationTimer = null;
 
     // for autoplay
@@ -167,55 +260,6 @@
     let socket;
     const mobileUrl = `${window.location.origin}/mobile/${props.id}`;
 
-    function resetState(fullReset = true) {
-        if (fullReset) {
-            clearAllStorageAndTokens();
-        } else {
-            error.value = "";
-            spotifyToken.value = null;
-            selectedSongs.value = [];
-            player.value = null;
-            playerStatus.value = "Not initialized";
-            isPlaying.value = false;
-            deviceId.value = null;
-            currentSong.value = 0;
-            initializationAttempts.value = 0;
-            clearTimeout(initializationTimer);
-        }
-    }
-
-    // Add this function near the top of your script
-    function clearAllStorageAndTokens() {
-        // Clear any local storage items if you're using them
-        localStorage.removeItem("spotify_token");
-        localStorage.removeItem("device_id");
-        sessionStorage.clear();
-
-        // Clear all refs
-        spotifyToken.value = null;
-        player.value = null;
-        deviceId.value = null;
-        selectedSongs.value = [];
-        currentSong.value = 0;
-        isPlaying.value = false;
-        musicVolume.value = 50;
-        error.value = "";
-        playerStatus.value = "Not initialized";
-        connectionStatus.value = "Disconnected";
-        initializationAttempts.value = 0;
-
-        // Clear any pending timers
-        clearTimeout(initializationTimer);
-    }
-
-    function resetPlaybackState() {
-        if (isPlaying.value) {
-            pausePlayback();
-        }
-        currentSong.value = 0;
-        isPlaying.value = false;
-    }
-
     function retryInitialization(token) {
         console.log(`Retry attempt ${initializationAttempts.value + 1} of ${MAX_INITIALIZATION_ATTEMPTS}`);
         initializationAttempts.value++;
@@ -230,9 +274,9 @@
     }
 
     function initializeSocket() {
-        // const url = `http://${window.location.hostname}:3000`;
+        const url = `http://${window.location.hostname}:3000`;
         // const url = "wss://us-central1-plants-in-space.cloudfunctions.net/app/";
-        const url = "https://plants-in-space-socket.onrender.com";
+        // const url = "https://plants-in-space-socket.onrender.com";
         connectionStatus.value = "Connecting";
         resetState();
 
@@ -275,6 +319,35 @@
             }
             resetPlaybackState();
             selectedSongs.value = songs;
+        });
+
+        socket.on("growth-started", async ({ songs, growthTime: time, distributions: dist }) => {
+            console.log("Received growth start signal");
+            growthTime.value = time;
+            distributions.value = dist;
+            growthActive.value = true;
+
+            // Clean up any existing playlist
+            cleanupPlaylist();
+
+            // Update selected songs if they've changed
+            selectedSongs.value = songs;
+
+            // Calculate the song playlist with durations
+            songPlaylist.value = calculateSongPlaylist(songs, time, dist);
+
+            // Log the calculated playlist
+            console.log(
+                "Starting playlist playback:",
+                songPlaylist.value.map((item) => ({
+                    songName: item.song.name,
+                    durationMs: item.duration,
+                    distribution: item.distribution,
+                })),
+            );
+
+            // Start playlist playback
+            await playPlaylist();
         });
 
         socket.on("volume-updated", ({ volume }) => {
@@ -559,6 +632,121 @@
         return currentSpotifyTrack && desiredTrack && currentSpotifyTrack.uri === desiredTrack.uri;
     }
 
+    function calculateSongPlaylist(songs, growthTimeSeconds, distributions) {
+        const totalMs = growthTimeSeconds * 1000;
+        totalGrowthTimeMs.value = totalMs;
+
+        return songs.map((song) => {
+            const distribution = distributions[song.id] || 0;
+            const durationMs = Math.round((distribution / 100) * totalMs);
+
+            return {
+                song: song,
+                duration: durationMs,
+                distribution: distribution,
+            };
+        });
+    }
+
+    // Add the playPlaylist function
+    async function playPlaylist() {
+        if (!player.value || !songPlaylist.value.length) return;
+
+        try {
+            playlistActive.value = true;
+            playlistStartTime.value = Date.now();
+            currentSong.value = 0;
+
+            // Start with the first song
+            console.log(`Starting playlist with: ${songPlaylist.value[0].song.name}`);
+            await playCurrentPlaylistSong(0);
+
+            // Clear any existing interval
+            if (playlistInterval.value) {
+                clearInterval(playlistInterval.value);
+            }
+
+            // Start the interval to check time and manage songs
+            playlistInterval.value = setInterval(async () => {
+                const currentTime = Date.now();
+                const elapsedTime = currentTime - playlistStartTime.value;
+                let accumulatedDuration = 0;
+
+                // Find which song should be playing
+                for (let i = 0; i < songPlaylist.value.length; i++) {
+                    const songDuration = songPlaylist.value[i].duration;
+
+                    if (elapsedTime >= accumulatedDuration && elapsedTime < accumulatedDuration + songDuration) {
+                        // We're in the correct song's timeframe
+                        if (currentSong.value !== i) {
+                            // Need to switch to this song
+                            console.log(`Switching to song: ${songPlaylist.value[i].song.name}`);
+                            currentSong.value = i;
+                            await playCurrentPlaylistSong(i);
+                        }
+                        break;
+                    }
+
+                    accumulatedDuration += songDuration;
+                }
+
+                // Check if playlist should end
+                const totalDuration = songPlaylist.value.reduce((sum, item) => sum + item.duration, 0);
+                if (elapsedTime >= totalDuration) {
+                    console.log("Playlist completed, stopping playback");
+                    await stopPlayback();
+                    cleanupPlaylist();
+                    socket.emit("playlist-completed", { roomId: props.id });
+                }
+            }, 1000); // Check every second
+        } catch (error) {
+            console.error("Error in playPlaylist:", error);
+            error.value = `Playlist playback error: ${error.message}`;
+            await stopPlayback();
+            cleanupPlaylist();
+        }
+    }
+
+    async function playCurrentPlaylistSong(index) {
+        if (!songPlaylist.value[index]) return;
+
+        try {
+            const playlistItem = songPlaylist.value[index];
+            await player.value.setVolume(musicVolume.value / 100);
+
+            console.log(`Playing ${playlistItem.song.name} for ${playlistItem.duration}ms`);
+
+            await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId.value}`, {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${spotifyToken.value}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    uris: [playlistItem.song.uri],
+                    position_ms: 0,
+                }),
+            });
+
+            isPlaying.value = true;
+            currentSong.value = index;
+            updatePlaybackStatus();
+        } catch (err) {
+            console.error(`Failed to play song ${index}:`, err);
+            throw new Error(`Failed to play song ${index}: ${err.message}`);
+        }
+    }
+
+    function cleanupPlaylist() {
+        if (playlistInterval.value) {
+            clearInterval(playlistInterval.value);
+            playlistInterval.value = null;
+        }
+        playlistStartTime.value = null;
+        playlistActive.value = false;
+        isPlaying.value = false;
+    }
+
     async function playCurrentSong() {
         if (!selectedSongs.value[currentSong.value] || !player.value) return;
 
@@ -667,6 +855,72 @@
         });
     }
 
+    function resetState(fullReset = true) {
+        if (fullReset) {
+            clearAllStorageAndTokens();
+        } else {
+            error.value = "";
+            spotifyToken.value = null;
+            selectedSongs.value = [];
+            player.value = null;
+            playerStatus.value = "Not initialized";
+            isPlaying.value = false;
+            deviceId.value = null;
+            currentSong.value = 0;
+            initializationAttempts.value = 0;
+            growthTime.value = null;
+            distributions.value = {};
+            growthActive.value = false;
+            songPlaylist.value = [];
+            totalGrowthTimeMs.value = 0;
+            clearTimeout(initializationTimer);
+            cleanupPlaylist();
+            songPlaylist.value = [];
+            totalGrowthTimeMs.value = 0;
+        }
+    }
+
+    // Add this function near the top of your script
+    function clearAllStorageAndTokens() {
+        // Clear any local storage items if you're using them
+        localStorage.removeItem("spotify_token");
+        localStorage.removeItem("device_id");
+        sessionStorage.clear();
+
+        // Clear all refs
+        spotifyToken.value = null;
+        player.value = null;
+        deviceId.value = null;
+        selectedSongs.value = [];
+        currentSong.value = 0;
+        isPlaying.value = false;
+        musicVolume.value = 50;
+        error.value = "";
+        playerStatus.value = "Not initialized";
+        connectionStatus.value = "Disconnected";
+        initializationAttempts.value = 0;
+        growthTime.value = null;
+        distributions.value = {};
+        growthActive.value = false;
+        songPlaylist.value = [];
+        totalGrowthTimeMs.value = 0;
+        cleanupPlaylist();
+        songPlaylist.value = [];
+        totalGrowthTimeMs.value = 0;
+        playlistActive.value = false;
+
+        // Clear any pending timers
+        clearTimeout(initializationTimer);
+    }
+
+    function resetPlaybackState() {
+        if (isPlaying.value) {
+            pausePlayback();
+        }
+        currentSong.value = 0;
+        isPlaying.value = false;
+    }
+
     onMounted(() => {
         resetState();
         socket = initializeSocket();
@@ -684,7 +938,7 @@
         if (player.value) {
             player.value.disconnect();
         }
-        clearTimeout(initializationTimer);
+        cleanupPlaylist();
         resetState();
     });
 </script>

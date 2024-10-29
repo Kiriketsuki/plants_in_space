@@ -163,6 +163,19 @@ io.on("connection", (socket) => {
         }
     });
 
+    socket.on("start-growth", ({ roomId, songs, growthTime, distributions }) => {
+        console.log(`Received growth start request for room ${roomId}`);
+        const room = rooms.get(roomId);
+        if (room && room.isMobileClient(socket.id)) {
+            // Send the growth data to all clients in the room
+            io.to(roomId).emit("growth-started", {
+                songs,
+                growthTime,
+                distributions,
+            });
+        }
+    });
+
     socket.on("update-volume", ({ roomId, volume }) => {
         const room = rooms.get(roomId);
         if (room && room.isMobileClient(socket.id)) {

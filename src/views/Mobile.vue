@@ -333,44 +333,6 @@
     let socket;
     let searchTimeout;
 
-    // Watchers for state changes
-    watch(selectedSongs, (newSongs) => {
-        if (socket && socket.connected) {
-            socket.emit("update-songs", {
-                roomId: props.id,
-                songs: newSongs,
-                distributions: songDistributions.value,
-            });
-        }
-
-        // Reset distributions when songs change
-        if (newSongs.length === 1) {
-            songDistributions.value = { [newSongs[0].id]: 100 };
-            isDistributionValid.value = true;
-        } else if (newSongs.length > 1) {
-            // Initialize even distribution
-            const evenShare = Math.floor(100 / newSongs.length);
-            const remainder = 100 - evenShare * newSongs.length;
-            songDistributions.value = newSongs.reduce((acc, song, index) => {
-                acc[song.id] = evenShare + (index === 0 ? remainder : 0);
-                return acc;
-            }, {});
-            validateDistribution();
-        } else {
-            songDistributions.value = {};
-            isDistributionValid.value = false;
-        }
-    });
-
-    watch(musicVolume, (newVolume) => {
-        if (socket && socket.connected) {
-            socket.emit("update-volume", {
-                roomId: props.id,
-                volume: newVolume,
-            });
-        }
-    });
-
     // Computed properties
     const totalDistribution = computed(() => {
         return Object.values(songDistributions.value).reduce((sum, value) => sum + value, 0);
@@ -390,9 +352,9 @@
     const SPOTIFY_SCOPES = ["streaming", "user-read-email", "user-read-private"].join(" ");
 
     function initializeSocket() {
-        // const url = `http://${window.location.hostname}:3000`;
+        const url = `http://${window.location.hostname}:3000`;
         // const url = "wss://us-central1-plants-in-space.cloudfunctions.net/app/";
-        const url = "https://plants-in-space-socket.onrender.com";
+        // const url = "https://plants-in-space-socket.onrender.com";
         connectionStatus.value = "Connecting";
 
         if (socket) {
@@ -483,7 +445,6 @@
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-
             const data = await response.json();
             console.log("Spotify user verified:", data.id);
         } catch (err) {
@@ -670,6 +631,20 @@
         return selectedSongs.value.some((song) => song.id === trackId);
     }
 
+    function startGrowth() {
+        if (socket && socket.connected) {
+            socket.emit("start-growth", {
+                roomId: props.id,
+                songs: selectedSongs.value,
+                growthTime: parseInt(growthTime.value),
+                distributions: songDistributions.value,
+            });
+
+        } else {
+            error.value = "Not connected to server. Please try reconnecting.";
+        }
+    }
+
     // Playback control functions
     function togglePlayback() {
         if (socket && socket.connected) {
@@ -712,6 +687,44 @@
         songDistributions.value = {};
         isDistributionValid.value = false;
     }
+
+    // Watchers for state changes
+    watch(selectedSongs, (newSongs) => {
+        if (socket && socket.connected) {
+            socket.emit("update-songs", {
+                roomId: props.id,
+                songs: newSongs,
+                distributions: songDistributions.value,
+            });
+        }
+
+        // Reset distributions when songs change
+        if (newSongs.length === 1) {
+            songDistributions.value = { [newSongs[0].id]: 100 };
+            isDistributionValid.value = true;
+        } else if (newSongs.length > 1) {
+            // Initialize even distribution
+            const evenShare = Math.floor(100 / newSongs.length);
+            const remainder = 100 - evenShare * newSongs.length;
+            songDistributions.value = newSongs.reduce((acc, song, index) => {
+                acc[song.id] = evenShare + (index === 0 ? remainder : 0);
+                return acc;
+            }, {});
+            validateDistribution();
+        } else {
+            songDistributions.value = {};
+            isDistributionValid.value = false;
+        }
+    });
+
+    watch(musicVolume, (newVolume) => {
+        if (socket && socket.connected) {
+            socket.emit("update-volume", {
+                roomId: props.id,
+                volume: newVolume,
+            });
+        }
+    });
 
     onMounted(() => {
         resetState();
