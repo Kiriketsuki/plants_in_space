@@ -216,6 +216,8 @@
     const playlistActive = ref(false);
     const playlistStartTime = ref(null);
     const playlistInterval = ref(null);
+    const currentLoopCount = ref(0);
+    const requiredLoops = ref({});
 
     let initializationTimer = null;
 
@@ -648,40 +650,96 @@
         });
     }
 
-    // Add the playPlaylist function
+    async function calculateRequiredLoops() {
+        // Calculate how many loops each song needs based on their actual duration
+        requiredLoops.value = {};
+
+        for (const playlistItem of songPlaylist.value) {
+            try {
+                // Fetch the song's actual duration from Spotify
+                const response = await fetch(`https://api.spotify.com/v1/tracks/${playlistItem.song.id}`, {
+                    headers: {
+                        Authorization: `Bearer ${spotifyToken.value}`,
+                    },
+                });
+
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const trackData = await response.json();
+
+                const actualDuration = trackData.duration_ms;
+                const requiredDuration = playlistItem.duration;
+
+                // Calculate required loops (rounded up)
+                const loops = Math.ceil(requiredDuration / actualDuration);
+
+                requiredLoops.value[playlistItem.song.id] = {
+                    actualDuration,
+                    requiredDuration,
+                    loops,
+                    remainderMs: requiredDuration % actualDuration,
+                };
+
+                console.log(`Song: ${playlistItem.song.name}`);
+                console.log(`- Actual duration: ${actualDuration}ms`);
+                console.log(`- Required duration: ${requiredDuration}ms`);
+                console.log(`- Needs ${loops} loops`);
+                console.log(`- Final loop remainder: ${requiredDuration % actualDuration}ms`);
+            } catch (err) {
+                console.error(`Failed to fetch duration for ${playlistItem.song.name}:`, err);
+            }
+        }
+    }
+
     async function playPlaylist() {
         if (!player.value || !songPlaylist.value.length) return;
 
         try {
+            // Calculate required loops for each song before starting
+            await calculateRequiredLoops();
+
             playlistActive.value = true;
             playlistStartTime.value = Date.now();
             currentSong.value = 0;
+            currentLoopCount.value = 0;
 
-            // Start with the first song
             console.log(`Starting playlist with: ${songPlaylist.value[0].song.name}`);
             await playCurrentPlaylistSong(0);
 
-            // Clear any existing interval
             if (playlistInterval.value) {
                 clearInterval(playlistInterval.value);
             }
 
-            // Start the interval to check time and manage songs
             playlistInterval.value = setInterval(async () => {
                 const currentTime = Date.now();
                 const elapsedTime = currentTime - playlistStartTime.value;
                 let accumulatedDuration = 0;
 
-                // Find which song should be playing
                 for (let i = 0; i < songPlaylist.value.length; i++) {
                     const songDuration = songPlaylist.value[i].duration;
 
                     if (elapsedTime >= accumulatedDuration && elapsedTime < accumulatedDuration + songDuration) {
-                        // We're in the correct song's timeframe
-                        if (currentSong.value !== i) {
-                            // Need to switch to this song
-                            console.log(`Switching to song: ${songPlaylist.value[i].song.name}`);
+                        const currentSongData = songPlaylist.value[i];
+                        const loopInfo = requiredLoops.value[currentSongData.song.id];
+
+                        if (!loopInfo) continue;
+
+                        // Calculate which loop we should be on
+                        const songElapsedTime = elapsedTime - accumulatedDuration;
+                        const currentLoop = Math.floor(songElapsedTime / loopInfo.actualDuration);
+
+                        if (currentSong.value !== i || currentLoopCount.value !== currentLoop) {
                             currentSong.value = i;
+                            currentLoopCount.value = currentLoop;
+
+                            // Check if we're on the final loop and need to handle remainder
+                            const isLastLoop = currentLoop === loopInfo.loops - 1;
+                            const needsRemainder = isLastLoop && loopInfo.remainderMs > 0;
+
+                            console.log(`Starting loop ${currentLoop + 1}/${loopInfo.loops} of ${currentSongData.song.name}`);
+                            if (needsRemainder) {
+                                console.log(`This is the final loop with ${loopInfo.remainderMs}ms remainder`);
+                            }
+
                             await playCurrentPlaylistSong(i);
                         }
                         break;
@@ -690,7 +748,6 @@
                     accumulatedDuration += songDuration;
                 }
 
-                // Check if playlist should end
                 const totalDuration = songPlaylist.value.reduce((sum, item) => sum + item.duration, 0);
                 if (elapsedTime >= totalDuration) {
                     console.log("Playlist completed, stopping playback");
@@ -698,7 +755,7 @@
                     cleanupPlaylist();
                     socket.emit("playlist-completed", { roomId: props.id });
                 }
-            }, 100); // Check every second
+            }, 1000);
         } catch (error) {
             console.error("Error in playPlaylist:", error);
             error.value = `Playlist playback error: ${error.message}`;
@@ -712,10 +769,27 @@
 
         try {
             const playlistItem = songPlaylist.value[index];
+            const loopInfo = requiredLoops.value[playlistItem.song.id];
+
+            if (!loopInfo) {
+                throw new Error("Missing loop information for song");
+            }
+
             await player.value.setVolume(musicVolume.value / 100);
 
-            console.log(`Playing ${playlistItem.song.name} for ${playlistItem.duration}ms`);
+            console.log(`Playing ${playlistItem.song.name} (Loop ${currentLoopCount.value + 1}/${loopInfo.loops})`);
+            console.log(`Total duration needed: ${playlistItem.duration}ms`);
+            console.log(`Actual song duration: ${loopInfo.actualDuration}ms`);
 
+            // Set repeat mode to track first
+            await fetch(`https://api.spotify.com/v1/me/player/repeat?state=track&device_id=${deviceId.value}`, {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${spotifyToken.value}`,
+                },
+            });
+
+            // Then start playing the track
             await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId.value}`, {
                 method: "PUT",
                 headers: {
@@ -742,9 +816,20 @@
             clearInterval(playlistInterval.value);
             playlistInterval.value = null;
         }
+        // Turn off repeat mode with correct URL parameters
+        if (deviceId.value && spotifyToken.value) {
+            fetch(`https://api.spotify.com/v1/me/player/repeat?state=off&device_id=${deviceId.value}`, {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${spotifyToken.value}`,
+                },
+            }).catch(console.error);
+        }
         playlistStartTime.value = null;
         playlistActive.value = false;
         isPlaying.value = false;
+        currentLoopCount.value = 0;
+        requiredLoops.value = {};
     }
 
     async function playCurrentSong() {
