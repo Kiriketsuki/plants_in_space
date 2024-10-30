@@ -129,11 +129,20 @@
                             <div
                                 v-if="selectedSongs.length > 1"
                                 class="mt-2">
-                                <label class="text-sm text-gray-600">Distribution: {{ songDistributions[song.id] || 0 }}%</label>
+                                <div>
+                                    <label class="text-sm text-gray-600">Distribution: </label>
+                                    <input
+                                        type="number"
+                                        class="text-sm text-gray-600 text-center"
+                                        v-model.number="songDistributions[song.id]"
+                                        min="0"
+                                        max="100"
+                                        step="1" />
+                                    <label class="text-sm text-gray-600"> %</label>
+                                </div>
                                 <label class="text-sm text-gray-600">
-                                  Total Duration: 
-                                  {{ Math.floor((songDistributions[song.id] * growthTime) / 100) }}s 
-                                  {{ (((songDistributions[song.id] * growthTime) % 100) * 10).toFixed(0) }}ms
+                                    Total Duration:
+                                    {{ Math.floor((songDistributions[song.id] * growthTime) / 100) }}s {{ (((songDistributions[song.id] * growthTime) % 100) * 10).toFixed(0) }}ms
                                 </label>
                                 <input
                                     type="range"
@@ -490,85 +499,6 @@
     }
 
     function updateDistributions(event, changedSongId) {
-        const newValue = parseInt(event.target.value);
-        const oldValue = songDistributions.value[changedSongId];
-        const totalChange = newValue - oldValue;
-
-        // If trying to decrease, just proceed
-        if (totalChange <= 0) {
-            const newDistributions = { ...songDistributions.value };
-            newDistributions[changedSongId] = newValue;
-
-            // Distribute the change evenly among other songs
-            const otherSongIds = selectedSongs.value.map((song) => song.id).filter((id) => id !== changedSongId);
-
-            const changePerSong = -totalChange / otherSongIds.length;
-            otherSongIds.forEach((id) => {
-                newDistributions[id] = Math.round((songDistributions.value[id] + changePerSong) * 10) / 10;
-            });
-
-            songDistributions.value = newDistributions;
-            validateDistribution();
-            return;
-        }
-
-        // For increases, we need to be smarter about distribution
-        const otherSongIds = selectedSongs.value.map((song) => song.id).filter((id) => id !== changedSongId);
-
-        // Create new distribution object
-        const newDistributions = { ...songDistributions.value };
-        newDistributions[changedSongId] = newValue;
-
-        let remainingChange = totalChange;
-        let previousChange = -1;
-
-        // Keep trying to distribute until we can't change anymore
-        while (remainingChange > 0 && remainingChange !== previousChange) {
-            previousChange = remainingChange;
-
-            // Get songs that still have room to decrease
-            const availableSongs = otherSongIds.filter((id) => newDistributions[id] > 0);
-
-            if (availableSongs.length === 0) {
-                // No songs can be decreased further
-                event.target.value = oldValue;
-                return;
-            }
-
-            // Calculate how much each available song should change
-            const changePerSong = remainingChange / availableSongs.length;
-
-            remainingChange = 0;
-
-            availableSongs.forEach((id) => {
-                const currentValue = newDistributions[id];
-                const targetChange = Math.min(changePerSong, currentValue);
-                const actualChange = Math.round(targetChange * 10) / 10;
-
-                newDistributions[id] = Math.max(0, currentValue - actualChange);
-                remainingChange += changePerSong - actualChange;
-            });
-        }
-
-        // If we couldn't distribute all changes, revert
-        if (remainingChange > 0) {
-            event.target.value = oldValue;
-            return;
-        }
-
-        // Adjust for rounding errors to ensure total is exactly 100
-        const total = Object.values(newDistributions).reduce((sum, val) => sum + val, 0);
-        if (Math.abs(total - 100) > 0.01) {
-            const availableSongs = otherSongIds.filter((id) => newDistributions[id] > 0);
-            if (availableSongs.length > 0) {
-                const roundingError = (100 - total) / availableSongs.length;
-                availableSongs.forEach((id) => {
-                    newDistributions[id] = Math.round((newDistributions[id] + roundingError) * 10) / 10;
-                });
-            }
-        }
-
-        songDistributions.value = newDistributions;
         validateDistribution();
     }
 
@@ -777,5 +707,17 @@
         height: 16px;
         border-radius: 50%;
         cursor: pointer;
+    }
+
+    /* Hide the arrows in number inputs for Chrome, Safari, Edge, and Opera */
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
+    /* Hide the arrows in number inputs for Firefox */
+    input[type="number"] {
+        -moz-appearance: textfield;
     }
 </style>
