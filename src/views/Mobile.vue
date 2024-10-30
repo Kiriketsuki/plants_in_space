@@ -137,7 +137,8 @@
                                         v-model.number="songDistributions[song.id]"
                                         min="0"
                                         max="100"
-                                        step="1" />
+                                        step="1"
+                                        @input="validateDistribution" />
                                     <label class="text-sm text-gray-600"> %</label>
                                 </div>
                                 <label class="text-sm text-gray-600">
@@ -146,8 +147,8 @@
                                 </label>
                                 <input
                                     type="range"
-                                    v-model.number="songDistributions[song.id]"
-                                    @input="updateDistributions($event, song.id)"
+                                    :value="songDistributions[song.id]"
+                                    @change="updateDistributions($event, song.id)"
                                     min="0"
                                     max="100"
                                     step="1"
@@ -499,6 +500,73 @@
     }
 
     function updateDistributions(event, changedSongId) {
+        console.log("Updating distributions");
+        const newValue = parseInt(event.target.value);
+        const oldValue = songDistributions.value[changedSongId];
+        const totalChange = newValue - oldValue;
+
+        console.log("Old value:", oldValue);
+        console.log("New value:", newValue);
+        console.log("Total change needed:", totalChange);
+
+        validateDistribution();
+        if (!isDistributionValid.value) {
+            songDistributions.value[changedSongId] = newValue;
+        }
+
+        const newDistributions = { ...songDistributions.value };
+        newDistributions[changedSongId] = newValue;
+
+        const otherSongIds = Object.keys(songDistributions.value).filter((id) => id !== changedSongId);
+
+        if (totalChange > 0) {
+            let remainingChange = totalChange;
+
+            while (remainingChange > 0) {
+                let changeWasMade = false;
+
+                for (const id of otherSongIds) {
+                    if (newDistributions[id] > 0 && remainingChange > 0) {
+                        newDistributions[id]--;
+                        remainingChange--;
+                        changeWasMade = true;
+                    }
+                }
+
+                if (!changeWasMade && remainingChange > 0) {
+                    console.log("Could not complete distribution");
+                    return;
+                }
+            }
+        } else if (totalChange < 0) {
+            let remainingChange = Math.abs(totalChange);
+
+            while (remainingChange > 0) {
+                let changeWasMade = false;
+
+                for (const id of otherSongIds) {
+                    if (newDistributions[id] < 100 && remainingChange > 0) {
+                        newDistributions[id]++;
+                        remainingChange--;
+                        changeWasMade = true;
+                    }
+                }
+
+                if (!changeWasMade && remainingChange > 0) {
+                    console.log("Could not complete distribution");
+                    return;
+                }
+            }
+        }
+
+        const total = Object.values(newDistributions).reduce((sum, val) => sum + val, 0);
+        if (Math.abs(total - 100) > 0.01) {
+            console.log("Invalid total:", total);
+            return;
+        }
+
+        console.log("New distributions:", newDistributions);
+        songDistributions.value = newDistributions;
         validateDistribution();
     }
 
