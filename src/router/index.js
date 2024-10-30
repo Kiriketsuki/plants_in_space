@@ -6,6 +6,7 @@ const Audio = () => import("../views/Audio.vue");
 const Desktop = () => import("../views/Desktop.vue");
 const Mobile = () => import("../views/Mobile.vue");
 const SpotifyRedirect = () => import("../views/SpotifyRedirect.vue");
+const About = () => import("../views/About.vue");
 
 const routes = [
     {
@@ -47,6 +48,12 @@ const routes = [
         name: "spotify-redirect",
         component: SpotifyRedirect,
     },
+
+    {
+        path: "/about",
+        name: "about",
+        component: About,
+    }
 ];
 
 const router = createRouter({
