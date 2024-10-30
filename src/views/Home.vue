@@ -1,6 +1,6 @@
 <template>
     <div class="w-[100vw] h-screen bg-yellow-500 flex items-center justify-center border-2 flex-col">
-        <Title />
+        <Title class="absolute top-0 left-0" />
         <h1 class="text-8xl">hello world</h1>
         <h2>goodbye world</h2>
         <div>

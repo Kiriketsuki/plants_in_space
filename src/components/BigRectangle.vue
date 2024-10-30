@@ -1,5 +1,5 @@
 <template>
-    <div class="w-screen h-[10vh] bg-green-400 border-2 border-red-100">
+    <div class="w-screen h-[10vh] bg-green-400 border-2 border-red-100 font-asd">
         big Rectangle
     </div>
 </template>
