@@ -10,6 +10,7 @@
     import { ref, onMounted } from "vue";
     import * as THREE from "three";
     import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+    import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
     import GUI from "lil-gui";
     import gsap from "gsap";
 
@@ -28,6 +29,8 @@
             this.depth = this.calculateDepth();
             this.height = this.calculateHeight();
             this.leafCount = 0;
+            this.mesh = null;
+            this.modelScale = { y: 0 };
         }
 
         calculateDepth() {
@@ -95,8 +98,16 @@
                 const renderer = new THREE.WebGLRenderer({ canvas: canvas.value });
                 renderer.setSize(window.innerWidth, window.innerHeight);
 
-                // const controls = new OrbitControls(camera, renderer.domElement);
-                // controls.enableDamping = true;
+                const controls = new OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+                directionalLight.position.set(5, 5, 5);
+                scene.add(directionalLight);
+
+                // For debugging the model's position and orientation
+                const axesHelper = new THREE.AxesHelper(5);
+                scene.add(axesHelper);
 
                 const sceneLight = new THREE.AmbientLight(0xffffff, 0.5);
                 scene.add(sceneLight);
@@ -245,16 +256,55 @@
                 const X_VARIANCE = 1;
                 const Z_VARIANCE = 1;
                 const ANIM_SPEED = 10;
-                const emitterInfluence = 1;
+                const emitterInfluence = 0.00001;
 
                 const growthConfig = {
-                    15: "root",
+                    // 15: "root",
                     1000: "leaf",
                 };
 
                 let firstFork = -1;
                 let lastUsedForkIndex = 0;
 
+                // First, create a loading manager to track when the model is ready
+                const loadingManager = new THREE.LoadingManager();
+                const loader = new GLTFLoader(loadingManager);
+                let stalkGeometry = null;
+                let isModelLoaded = false;
+
+                // Create a simple material for the stalk
+                const stalkMaterial = new THREE.MeshPhongMaterial({
+                    color: 0x8b4513, // Brown color
+                    shininess: 30,
+                    emissive: 0x222222,
+                });
+
+                loader.load(
+                    "../assets/stalk.glb",
+                    (gltf) => {
+                        gltf.scene.traverse((child) => {
+                            if (child.isMesh && !stalkGeometry) {
+                                console.log("Found mesh geometry:", child.geometry);
+                                stalkGeometry = child.geometry.clone();
+
+                                // Rotate the base geometry to point upwards
+                                stalkGeometry.rotateZ(Math.PI / 2);
+
+                                // Set the base scale to 0.1
+                                // stalkGeometry.scale(0.2, 0.2, 0.2);
+                                stalkGeometry.scale(1, 0.8, 1);
+
+                                isModelLoaded = true;
+                            }
+                        });
+                    },
+                    undefined,
+                    (error) => {
+                        console.error("Error loading model:", error);
+                    },
+                );
+
+                // Modify the addNode function's stalk handling
                 function addNode(x, y, z, type, parent = null, targetPos = null) {
                     const node = new Node(x, y, z, type, parent);
                     nodes[type].push(node);
@@ -277,12 +327,10 @@
 
                     let nodeMesh;
                     if (type === "leaf") {
+                        // Leaf handling remains unchanged
                         nodeMesh = new THREE.Mesh(leafGeometry, nodeMaterial);
-                        // Set initial scale to 0 for leaves
                         nodeMesh.scale.set(0, 0, 0);
-                        // Add target scale property for animation
                         node.targetScale = 1;
-                        // Random rotation for variety
                         nodeMesh.rotation.x = Math.random() * Math.PI;
                         nodeMesh.rotation.y = Math.random() * Math.PI;
                         nodeMesh.rotation.z = Math.random() * Math.PI;
@@ -292,20 +340,68 @@
 
                     nodeMesh.position.set(x, y, z);
                     nodeObjects.add(nodeMesh);
-
                     node.mesh = nodeMesh;
 
                     if (parent && type !== "leaf") {
-                        // Only create connection lines for non-leaf nodes
-                        const connectionGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(parent.x, parent.y, parent.z), new THREE.Vector3(x, y, z)]);
-                        const connectionMaterial = new THREE.LineBasicMaterial({ color: nodeColor });
-                        const connectionLine = new THREE.Line(connectionGeometry, connectionMaterial);
-                        connectionObjects.add(connectionLine);
+                        if (type === "stalk" && isModelLoaded && stalkGeometry) {
+                            // Create a new mesh using the geometry and material
+                            const stalkMesh = new THREE.Mesh(stalkGeometry, stalkMaterial);
 
-                        node.connectionLine = connectionLine;
+                            // Initialize with zero scale
+                            const transform = calculateStalkTransform(parent, node, 0);
+                            stalkMesh.position.copy(transform.position);
+                            stalkMesh.quaternion.copy(transform.rotation);
+                            stalkMesh.scale.copy(transform.scale);
+
+                            nodeObjects.add(stalkMesh);
+                            node.connectionMesh = stalkMesh;
+                            node.connectionLine = null;
+
+                            // Store parent position for animation
+                            node.parentPos = {
+                                x: parent.x,
+                                y: parent.y,
+                                z: parent.z,
+                            };
+
+                            // Initialize growth progress
+                            node.growthProgress = 0;
+                        } else {
+                            // Fallback to line if model isn't loaded or for non-stalk types
+                            const connectionGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(parent.x, parent.y, parent.z), new THREE.Vector3(x, y, z)]);
+                            const connectionMaterial = new THREE.LineBasicMaterial({ color: nodeColor });
+                            const connectionLine = new THREE.Line(connectionGeometry, connectionMaterial);
+                            connectionObjects.add(connectionLine);
+
+                            node.connectionLine = connectionLine;
+                            node.connectionMesh = null;
+                        }
                     }
 
                     return node;
+                }
+
+                function calculateStalkTransform(parent, current, scale = 1) {
+                    // Calculate direction vector from parent to current
+                    const direction = new THREE.Vector3(current.x - parent.x, current.y - parent.y, current.z - parent.z);
+
+                    // Calculate the distance between points
+                    const distance = direction.length();
+
+                    // Calculate the midpoint for positioning
+                    const midpoint = new THREE.Vector3(parent.x + direction.x * 0.5, parent.y + direction.y * 0.5, parent.z + direction.z * 0.5);
+
+                    // Calculate rotation to align with direction
+                    const quaternion = new THREE.Quaternion();
+                    const up = new THREE.Vector3(0, 1, 0);
+                    direction.normalize();
+                    quaternion.setFromUnitVectors(up, direction);
+
+                    return {
+                        position: midpoint,
+                        rotation: quaternion,
+                        scale: new THREE.Vector3(0.2, distance * scale, 0.2),
+                    };
                 }
 
                 function calculateTargetPosition(parentNode, type) {
@@ -685,19 +781,7 @@
                 let lastStalkHeight = 0;
                 let currentNode = null;
 
-                function animate(time) {
-                    requestAnimationFrame(animate);
-                    // controls.update();
-                    updateCameraPosition(time / 25000);
-
-                    const deltaTime = time - elapsedTime;
-                    elapsedTime = time;
-
-                    // Smoothly update music emitter position
-                    musicEmitterAngle += musicEmitterSpeed * deltaTime;
-                    musicEmitter.position.x = Math.cos(musicEmitterAngle) * musicEmitterRadius;
-                    musicEmitter.position.z = Math.sin(musicEmitterAngle) * musicEmitterRadius;
-
+                function animatePlant(deltaTime) {
                     const maxIndex = Math.max(...Object.keys(growthConfig).map(Number));
 
                     if (currentIndex <= maxIndex) {
@@ -723,7 +807,7 @@
                                 if (type === "stalk") {
                                     if (currentNode.height > lastStalkHeight) {
                                         lastStalkHeight = currentNode.height;
-                                        animateCameraForStalk();
+                                        // animateCameraForStalk();
                                     }
                                 }
                             }
@@ -766,7 +850,25 @@
 
                                 currentNode.mesh.position.set(currentNode.x, currentNode.y, currentNode.z);
 
-                                if (currentNode.connectionLine) {
+                                // In animatePlant, replace the connectionMesh update code with:
+                                if (currentNode.connectionMesh) {
+                                    const currentPos = {
+                                        x: currentNode.x,
+                                        y: currentNode.y,
+                                        z: currentNode.z,
+                                    };
+
+                                    // Calculate growth progress
+                                    currentNode.growthProgress = Math.min(1, currentNode.growthProgress + moveAmount / 2);
+
+                                    // Get transform based on current growth
+                                    const transform = calculateStalkTransform(currentNode.parentPos, currentPos, currentNode.growthProgress);
+
+                                    // Apply transform
+                                    currentNode.connectionMesh.position.copy(transform.position);
+                                    currentNode.connectionMesh.quaternion.copy(transform.rotation);
+                                    currentNode.connectionMesh.scale.copy(transform.scale);
+                                } else if (currentNode.connectionLine) {
                                     const positions = currentNode.connectionLine.geometry.attributes.position.array;
                                     positions[3] = currentNode.x;
                                     positions[4] = currentNode.y;
@@ -800,9 +902,27 @@
                             nodeInfo.type = currentNode.type;
                         }
                     }
+                }
+
+                function animate(time) {
+                    requestAnimationFrame(animate);
+                    controls.update();
+                    // updateCameraPosition(time / 25000);
+
+                    const deltaTime = time - elapsedTime;
+                    elapsedTime = time;
+
+                    // Smoothly update music emitter position
+                    musicEmitterAngle += musicEmitterSpeed * deltaTime;
+                    musicEmitter.position.x = Math.cos(musicEmitterAngle) * musicEmitterRadius;
+                    musicEmitter.position.z = Math.sin(musicEmitterAngle) * musicEmitterRadius;
 
                     camera.lookAt(cameraTarget);
                     renderer.render(scene, camera);
+
+                    if (time > 5000 && isModelLoaded) {
+                        animatePlant(deltaTime);
+                    }
                 }
 
                 animate(0);
