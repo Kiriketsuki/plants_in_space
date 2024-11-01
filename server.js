@@ -240,6 +240,13 @@ io.on("connection", (socket) => {
         }
     });
 
+    socket.on("music-direction-updated", ({ roomId, direction }) => {
+        const room = rooms.get(roomId);
+        if (room && room.isMobileClient(socket.id)) {
+            io.to(roomId).emit("music-direction-updated", { direction });
+        }
+    });
+
     socket.on("toggle-playback", ({ roomId }) => {
         console.log(`Received playback toggle request for room ${roomId}`);
         const room = rooms.get(roomId);

@@ -90,6 +90,25 @@
 
                         <!-- Playback Controls -->
                         <div class="space-y-4">
+                            <!-- Music Direction Slider -->
+                            <div class="bg-gray-700 rounded-lg p-4">
+                                <h3 class="text-lg font-semibold text-white mb-2">Music Direction</h3>
+                                <div class="flex items-center space-x-4">
+                                    <span class="text-gray-300">Left</span>
+                                    <input
+                                        type="range"
+                                        v-model="musicDirection"
+                                        min="0"
+                                        max="100"
+                                        class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+                                        @input="updateChannelVolumes" />
+                                    <span class="text-gray-300">Right</span>
+                                </div>
+                                <div class="flex justify-between text-gray-400 mt-1">
+                                    <span>L: {{ leftVolume }}%</span>
+                                    <span>R: {{ rightVolume }}%</span>
+                                </div>
+                            </div>
                             <button
                                 @click="togglePlayback"
                                 :disabled="!allFilesLoaded"
@@ -147,6 +166,13 @@
     const playbackInterval = ref(null);
     const musicVolume = ref(50);
 
+    // Add new audio control refs
+    const musicDirection = ref(50);
+    const leftVolume = computed(() => 100 - musicDirection.value);
+    const rightVolume = computed(() => musicDirection.value);
+    const leftGainNode = ref(null);
+    const rightGainNode = ref(null);
+
     const mobileUrl = `${window.location.origin}/mobile/${props.id}`;
 
     // Computed properties
@@ -163,8 +189,8 @@
 
     // Socket initialization
     function initializeSocket() {
-        // const url = `http://${window.location.hostname}:3000`;
-        const url = "https://plants-in-space-socket.onrender.com";
+        const url = `http://${window.location.hostname}:3000`;
+        // const url = "https://plants-in-space-socket.onrender.com";
         connectionStatus.value = "Connecting";
 
         socket.value = io(url, {
@@ -301,9 +327,13 @@
         });
 
         socket.value.on("volume-updated", ({ volume }) => {
-            if (currentAudio.value) {
-                currentAudio.value.gainNode.gain.value = volume / 100;
-            }
+            musicVolume.value = volume;
+            updateChannelVolumes();
+        });
+
+        socket.value.on("music-direction-updated", ({ direction }) => {
+            musicDirection.value = direction;
+            updateChannelVolumes();
         });
 
         socket.value.on("toggle-playback", async () => {
@@ -499,22 +529,42 @@
             }
 
             const source = audioContext.value.createBufferSource();
-            const gainNode = audioContext.value.createGain();
+            const splitter = audioContext.value.createChannelSplitter(2);
+            const merger = audioContext.value.createChannelMerger(2);
 
+            // Create separate gain nodes for left and right channels
+            leftGainNode.value = audioContext.value.createGain();
+            rightGainNode.value = audioContext.value.createGain();
+
+            // Set up the audio routing
             source.buffer = audioBuffer;
-            source.connect(gainNode);
-            gainNode.connect(audioContext.value.destination);
-            gainNode.gain.value = musicVolume.value / 100;
+            source.connect(splitter);
+
+            // Connect left channel
+            splitter.connect(leftGainNode.value, 0);
+            leftGainNode.value.connect(merger, 0, 0);
+
+            // Connect right channel
+            splitter.connect(rightGainNode.value, 1);
+            rightGainNode.value.connect(merger, 0, 1);
+
+            // Connect merger to destination
+            merger.connect(audioContext.value.destination);
+
+            // Set initial volumes
+            updateChannelVolumes();
 
             source.loop = true;
             source.start(0);
 
-            console.log("Audio playback started:", {
+            console.log("Stereo audio playback started:", {
                 bufferDuration: audioBuffer.duration,
                 playbackDuration: duration,
+                leftVolume: leftVolume.value,
+                rightVolume: rightVolume.value,
             });
 
-            return { source, gainNode };
+            return { source, leftGainNode: leftGainNode.value, rightGainNode: rightGainNode.value };
         } catch (err) {
             console.error("Error in playAudioBuffer:", err);
             audioStatus.value = `Playback Error: ${err.message}`;
@@ -547,6 +597,18 @@
         currentSong.value = 0;
     }
 
+    function updateChannelVolumes() {
+        if (leftGainNode.value && rightGainNode.value) {
+            const leftGain = (leftVolume.value / 100) * (musicVolume.value / 100) * 2;
+            const rightGain = (rightVolume.value / 100) * (musicVolume.value / 100) * 2;
+
+            leftGainNode.value.gain.value = leftGain;
+            rightGainNode.value.gain.value = rightGain;
+
+            console.log("Updated channel volumes:", { leftGain, rightGain });
+        }
+    }
+
     function resetState() {
         selectedSongs.value = [];
         songFiles.value = new Map();
@@ -568,6 +630,15 @@
         if (playbackInterval.value) {
             clearInterval(playbackInterval.value);
             playbackInterval.value = null;
+        }
+
+        if (leftGainNode.value) {
+            leftGainNode.value.disconnect();
+            leftGainNode.value = null;
+        }
+        if (rightGainNode.value) {
+            rightGainNode.value.disconnect();
+            rightGainNode.value = null;
         }
     }
 

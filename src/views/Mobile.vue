@@ -174,7 +174,6 @@
                     v-if="selectedSongs.length > 0"
                     class="mt-8 bg-gray-800 rounded-lg p-4">
                     <h3 class="text-lg font-semibold text-white mb-4">Playback Controls</h3>
-
                     <!-- Controls -->
                     <div class="flex flex-col space-y-4">
                         <!-- Volume Control -->
@@ -214,7 +213,6 @@
                                         d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
                                 </svg>
                             </button>
-
                             <input
                                 type="range"
                                 min="0"
@@ -222,10 +220,54 @@
                                 step="1"
                                 v-model="musicVolume"
                                 class="flex-1 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer" />
-
                             <span class="text-white text-sm w-8">
                                 {{ musicVolume }}
                             </span>
+                        </div>
+
+                        <!-- Direction Control -->
+                        <div class="flex flex-col space-y-2">
+                            <div class="flex justify-between text-white text-sm">
+                                <span>Direction</span>
+                                <div class="flex space-x-2">
+                                    <span>L: {{ leftVolume }}%</span>
+                                    <span>R: {{ rightVolume }}%</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-4">
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    class="h-6 w-6 text-white"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                                </svg>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    step="1"
+                                    v-model="musicDirection"
+                                    @input="updateMusicDirection"
+                                    class="flex-1 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer" />
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    class="h-6 w-6 text-white"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                                </svg>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -252,6 +294,10 @@
     const songDistributions = ref({});
     const isDistributionValid = ref(false);
 
+    const musicDirection = ref(50);
+    const leftVolume = computed(() => musicDirection.value);
+    const rightVolume = computed(() => 100 - musicDirection.value);
+
     let debounceTimeout;
 
     const CHUNK_SIZE = 16384; // 16KB chunks
@@ -269,8 +315,8 @@
 
     // Socket Functions
     function initializeSocket() {
-        // const url = `http://${window.location.hostname}:3000`;
-        const url = "https://plants-in-space-socket.onrender.com";
+        const url = `http://${window.location.hostname}:3000`;
+        // const url = "https://plants-in-space-socket.onrender.com";
         connectionStatus.value = "Connecting";
 
         if (socket) {
@@ -643,6 +689,14 @@
         } else {
             musicVolume.value = previousVolume.value;
         }
+    }
+
+    function updateMusicDirection() {
+        console.log("Direction updated:", musicDirection.value);
+        socket.emit("music-direction-updated", {
+            roomId: props.id,
+            direction: musicDirection.value,
+        });
     }
 
     function resetState() {
