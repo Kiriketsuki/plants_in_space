@@ -37,22 +37,9 @@
                 </div>
             </div>
 
-            <!-- Spotify Login -->
-            <div
-                v-if="!spotifyToken"
-                class="mb-6">
-                <button
-                    @click="loginToSpotify"
-                    class="w-full bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 transition-colors">
-                    Login with Spotify
-                </button>
-            </div>
-
-            <!-- Song Selection Interface -->
-            <div
-                v-if="spotifyToken"
-                class="space-y-6">
-                <!-- Search Box -->
+            <!-- File Upload Interface -->
+            <div class="space-y-6">
+                <!-- Search Box (non-functional) -->
                 <div>
                     <label
                         for="search"
@@ -61,41 +48,26 @@
                     </label>
                     <input
                         id="search"
-                        v-model="searchQuery"
-                        @input="debounceSearch"
                         type="text"
-                        placeholder="Enter song or artist name..."
+                        placeholder="Enter song name..."
                         class="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" />
                 </div>
 
-                <!-- Search Results -->
-                <div v-if="searchResults.length > 0">
-                    <h3 class="text-lg font-semibold mb-2">Search Results</h3>
-                    <div class="space-y-2 max-h-60 overflow-y-auto">
-                        <div
-                            v-for="track in searchResults"
-                            :key="track.id"
-                            class="flex items-center justify-between p-2 hover:bg-gray-50 rounded border">
-                            <div class="flex items-center space-x-3">
-                                <img
-                                    :src="track.album.images[track.album.images.length - 1]?.url"
-                                    class="w-10 h-10 object-cover rounded"
-                                    alt="Album art" />
-                                <div>
-                                    <p class="font-medium">{{ track.name }}</p>
-                                    <p class="text-sm text-gray-600">
-                                        {{ track.artists.map((a) => a.name).join(", ") }}
-                                    </p>
-                                </div>
-                            </div>
-                            <button
-                                @click="selectSong(track)"
-                                :disabled="selectedSongs.length >= 5 || isSelected(track.id)"
-                                class="px-3 py-1 bg-green-500 text-white rounded-md disabled:bg-gray-300 hover:bg-green-600 transition-colors">
-                                {{ isSelected(track.id) ? "Selected" : "Select" }}
-                            </button>
-                        </div>
-                    </div>
+                <!-- File Upload Button -->
+                <div>
+                    <input
+                        type="file"
+                        ref="fileInput"
+                        @change="handleFileUpload"
+                        accept=".mp3"
+                        multiple
+                        class="hidden" />
+                    <button
+                        @click="triggerFileUpload"
+                        :disabled="selectedSongs.length >= 5"
+                        class="w-full bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 transition-colors disabled:bg-gray-300">
+                        Upload Files (MP3 only, max 5)
+                    </button>
                 </div>
 
                 <!-- Selected Songs -->
@@ -106,25 +78,33 @@
                             v-for="song in selectedSongs"
                             :key="song.id"
                             class="flex flex-col p-3 bg-gray-50 rounded border">
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center space-x-3">
-                                    <img
-                                        :src="song.album.images[song.album.images.length - 1]?.url"
-                                        class="w-12 h-12 object-cover rounded"
-                                        alt="Album art" />
-                                    <div>
-                                        <p class="font-medium">{{ song.name }}</p>
-                                        <p class="text-sm text-gray-600">
-                                            {{ song.artists.map((a) => a.name).join(", ") }}
-                                        </p>
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="flex-1">
+                                    <!-- Song Name Input -->
+                                    <input
+                                        v-model="song.name"
+                                        type="text"
+                                        class="w-full p-2 border rounded-md mb-2"
+                                        placeholder="Song name" />
+                                    <!-- Tempo Input -->
+                                    <div class="flex items-center space-x-2">
+                                        <label class="text-sm text-gray-600">Tempo:</label>
+                                        <input
+                                            v-model.number="song.tempo"
+                                            type="number"
+                                            min="1"
+                                            max="300"
+                                            class="w-20 p-2 border rounded-md"
+                                            placeholder="100" />
                                     </div>
                                 </div>
                                 <button
                                     @click="removeSong(song.id)"
-                                    class="px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors">
+                                    class="ml-2 px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors">
                                     Remove
                                 </button>
                             </div>
+
                             <!-- Distribution slider -->
                             <div
                                 v-if="selectedSongs.length > 1"
@@ -196,60 +176,6 @@
 
                     <!-- Controls -->
                     <div class="flex flex-col space-y-4">
-                        <!-- Main Controls -->
-                        <div class="flex justify-center items-center space-x-6">
-                            <button
-                                @click="previousSong"
-                                class="p-2 text-white hover:text-green-400 transition-colors">
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    class="h-8 w-8"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                                </svg>
-                            </button>
-
-                            <button
-                                @click="togglePlayback"
-                                class="p-3 bg-green-500 rounded-full text-white hover:bg-green-600 transition-colors">
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    class="h-8 w-8"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                </svg>
-                            </button>
-
-                            <button
-                                @click="nextSong"
-                                class="p-2 text-white hover:text-green-400 transition-colors">
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    class="h-8 w-8"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                                </svg>
-                            </button>
-                        </div>
-
                         <!-- Volume Control -->
                         <div class="flex items-center space-x-4">
                             <button
@@ -302,20 +228,6 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- Loading State -->
-                <div
-                    v-if="isLoading"
-                    class="text-center py-4">
-                    <p class="text-gray-600">Searching...</p>
-                </div>
-
-                <!-- No Results -->
-                <div
-                    v-if="searchQuery && !isLoading && searchResults.length === 0"
-                    class="text-center py-4">
-                    <p class="text-gray-600">No songs found</p>
-                </div>
             </div>
         </div>
     </div>
@@ -324,29 +236,23 @@
 <script setup>
     import { ref, onMounted, onUnmounted, watch, computed } from "vue";
     import { io } from "socket.io-client";
-    import { SPOTIFY_CLIENT_ID } from "../../secrets.js";
-    import { useRoute, useRouter } from "vue-router";
 
     const props = defineProps(["id"]);
-    const route = useRoute();
-    const router = useRouter();
     const error = ref("");
     const connectionStatus = ref("Disconnected");
     const socketId = ref(null);
-    const spotifyToken = ref(null);
-    const searchQuery = ref("");
-    const searchResults = ref([]);
     const selectedSongs = ref([]);
-    const isLoading = ref(false);
     const musicVolume = ref(50);
     const previousVolume = ref(50);
+    const fileInput = ref(null);
 
     const growthTime = ref("120");
     const songDistributions = ref({});
     const isDistributionValid = ref(false);
 
+    const CHUNK_SIZE = 16384; // 16KB chunks
+
     let socket;
-    let searchTimeout;
 
     // Computed properties
     const totalDistribution = computed(() => {
@@ -354,22 +260,12 @@
     });
 
     const canStart = computed(() => {
-        return selectedSongs.value.length > 0 && selectedSongs.value.length <= 5 && (selectedSongs.value.length === 1 || isDistributionValid.value);
+        return selectedSongs.value.length > 0 && selectedSongs.value.length <= 5 && (selectedSongs.value.length === 1 || isDistributionValid.value) && selectedSongs.value.every((song) => song.name && song.tempo);
     });
-    function getRedirectUri() {
-        const protocol = "http://";
-        const hostname = window.location.hostname;
-        const port = "5173";
-        return `${protocol}${hostname}:${port}/mobile/redirect`;
-    }
 
-    const SPOTIFY_REDIRECT_URI = getRedirectUri();
-    const SPOTIFY_SCOPES = ["streaming", "user-read-email", "user-read-private"].join(" ");
-
+    // Socket Functions
     function initializeSocket() {
         const url = `http://${window.location.hostname}:3000`;
-        // const url = "wss://us-central1-plants-in-space.cloudfunctions.net/app/";
-        // const url = "https://plants-in-space-socket.onrender.com";
         connectionStatus.value = "Connecting";
 
         if (socket) {
@@ -389,6 +285,7 @@
             connectionStatus.value = "Connected";
             socketId.value = socket.id;
             socket.emit("join-room", props.id);
+            socket.emit("mobile-joined-room", props.id);
         });
 
         socket.on("connect_error", (err) => {
@@ -417,6 +314,13 @@
             error.value = "Desktop client disconnected. Please wait for reconnection.";
         });
 
+        socket.on("file-received", ({ songId }) => {
+            const song = selectedSongs.value.find((s) => s.id === songId);
+            if (song) {
+                song.uploaded = true;
+            }
+        });
+
         return socket;
     }
 
@@ -426,93 +330,128 @@
         socket = initializeSocket();
     }
 
-    function loginToSpotify() {
-        try {
-            const state = Math.random().toString(36).substring(7);
-            localStorage.setItem("spotify_auth_state", state);
-            localStorage.setItem("spotify_room_id", props.id);
+    // File Functions
 
-            const authUrlParams = new URLSearchParams({
-                response_type: "token",
-                client_id: SPOTIFY_CLIENT_ID,
-                scope: SPOTIFY_SCOPES,
-                redirect_uri: SPOTIFY_REDIRECT_URI,
-                state: state,
-                show_dialog: true,
-            });
-
-            const authUrl = `https://accounts.spotify.com/authorize?${authUrlParams.toString()}`;
-            window.location.href = authUrl;
-        } catch (err) {
-            console.error("Login error:", err);
-            error.value = `Failed to initialize Spotify login: ${err.message}`;
-        }
+    function triggerFileUpload() {
+        fileInput.value.click();
     }
 
-    async function verifyToken(token) {
-        try {
-            const response = await fetch("https://api.spotify.com/v1/me", {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
+    function handleFileUpload(event) {
+        const files = Array.from(event.target.files);
+
+        // Validate file type and count
+        const invalidFiles = files.filter((file) => !file.type.includes("audio/mpeg"));
+        if (invalidFiles.length > 0) {
+            error.value = "Only MP3 files are allowed";
+            return;
+        }
+
+        if (selectedSongs.value.length + files.length > 5) {
+            error.value = "Maximum 5 files allowed";
+            return;
+        }
+
+        // Process each file
+        files.forEach((file) => {
+            const newSong = {
+                id: Math.random().toString(36).substr(2, 9),
+                name: file.name.replace(".mp3", ""),
+                tempo: 100,
+                file: file,
+                size: file.size,
+                uploaded: false,
+            };
+
+            // Add the song to selected songs
+            selectedSongs.value = [...selectedSongs.value, newSong];
+        });
+
+        // Initialize distributions after adding songs
+        initializeDistributions(selectedSongs.value);
+
+        // Clear the input to allow selecting the same file again
+        event.target.value = "";
+    }
+
+    async function uploadSongFile(song) {
+        return new Promise((resolve, reject) => {
+            const file = song.file;
+            let offset = 0;
+
+            // Send file metadata first
+            socket.emit("file-meta", {
+                roomId: props.id,
+                songId: song.id,
+                filename: file.name,
+                fileSize: file.size,
+                fileType: file.type,
             });
 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+            function readAndUploadChunk() {
+                const reader = new FileReader();
+                const chunk = file.slice(offset, offset + CHUNK_SIZE);
+
+                reader.onload = function (e) {
+                    const chunkData = e.target.result;
+
+                    socket.emit("file-chunk", {
+                        roomId: props.id,
+                        songId: song.id,
+                        data: chunkData,
+                        offset: offset,
+                        final: offset + chunk.size >= file.size,
+                    });
+
+                    offset += chunk.size;
+
+                    if (offset < file.size) {
+                        readAndUploadChunk();
+                    } else {
+                        song.uploaded = true;
+                        resolve();
+                    }
+                };
+
+                reader.onerror = function (err) {
+                    reject(err);
+                };
+
+                reader.readAsArrayBuffer(chunk);
             }
-            const data = await response.json();
-            console.log("Spotify user verified:", data.id);
-        } catch (err) {
-            console.error("Token verification failed:", err);
-            error.value = "Failed to verify Spotify access";
-            spotifyToken.value = null;
-        }
+
+            readAndUploadChunk();
+        });
     }
 
-    async function searchSpotify() {
-        if (!searchQuery.value || !spotifyToken.value) return;
+    // Song Meta Functions
 
-        isLoading.value = true;
-        try {
-            const response = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(searchQuery.value)}&type=track&limit=10`, {
-                headers: {
-                    Authorization: `Bearer ${spotifyToken.value}`,
-                },
+    function initializeDistributions(songs) {
+        if (songs.length === 0) {
+            songDistributions.value = {};
+            isDistributionValid.value = false;
+        } else if (songs.length === 1) {
+            songDistributions.value = { [songs[0].id]: 100 };
+            isDistributionValid.value = true;
+        } else {
+            const evenShare = Math.floor(100 / songs.length);
+            const remainder = 100 - evenShare * songs.length;
+
+            // Reset distributions
+            songDistributions.value = {};
+
+            // Distribute evenly
+            songs.forEach((song, index) => {
+                songDistributions.value[song.id] = evenShare + (index === 0 ? remainder : 0);
             });
 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            searchResults.value = data.tracks.items;
-        } catch (err) {
-            console.error("Search error:", err);
-            error.value = "Failed to search Spotify";
-        } finally {
-            isLoading.value = false;
+            validateDistribution();
         }
-    }
-
-    function debounceSearch() {
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(searchSpotify, 300);
     }
 
     function updateDistributions(event, changedSongId) {
-        console.log("Updating distributions");
         const newValue = parseInt(event.target.value);
         const oldValue = songDistributions.value[changedSongId];
         const totalChange = newValue - oldValue;
-
-        console.log("Old value:", oldValue);
-        console.log("New value:", newValue);
-        console.log("Total change needed:", totalChange);
-
-        validateDistribution();
-        if (!isDistributionValid.value) {
-            songDistributions.value[changedSongId] = newValue;
-        }
 
         const newDistributions = { ...songDistributions.value };
         newDistributions[changedSongId] = newValue;
@@ -520,11 +459,10 @@
         const otherSongIds = Object.keys(songDistributions.value).filter((id) => id !== changedSongId);
 
         if (totalChange > 0) {
+            // Handle increase
             let remainingChange = totalChange;
-
             while (remainingChange > 0) {
                 let changeWasMade = false;
-
                 for (const id of otherSongIds) {
                     if (newDistributions[id] > 0 && remainingChange > 0) {
                         newDistributions[id]--;
@@ -532,18 +470,13 @@
                         changeWasMade = true;
                     }
                 }
-
-                if (!changeWasMade && remainingChange > 0) {
-                    console.log("Could not complete distribution");
-                    return;
-                }
+                if (!changeWasMade) break;
             }
         } else if (totalChange < 0) {
+            // Handle decrease
             let remainingChange = Math.abs(totalChange);
-
             while (remainingChange > 0) {
                 let changeWasMade = false;
-
                 for (const id of otherSongIds) {
                     if (newDistributions[id] < 100 && remainingChange > 0) {
                         newDistributions[id]++;
@@ -551,122 +484,64 @@
                         changeWasMade = true;
                     }
                 }
-
-                if (!changeWasMade && remainingChange > 0) {
-                    console.log("Could not complete distribution");
-                    return;
-                }
+                if (!changeWasMade) break;
             }
         }
 
-        const total = Object.values(newDistributions).reduce((sum, val) => sum + val, 0);
-        if (Math.abs(total - 100) > 0.01) {
-            console.log("Invalid total:", total);
-            return;
-        }
-
-        console.log("New distributions:", newDistributions);
         songDistributions.value = newDistributions;
         validateDistribution();
     }
 
     function validateDistribution() {
         const total = totalDistribution.value;
-        isDistributionValid.value = total === 100;
-    }
-
-    function selectSong(track) {
-        if (selectedSongs.value.length < 5 && !isSelected(track.id)) {
-            const newSelectedSongs = [...selectedSongs.value, track];
-            selectedSongs.value = newSelectedSongs;
-
-            // Set even distribution for all songs
-            const evenShare = Math.floor(1000 / newSelectedSongs.length) / 10; // Using 1000 for one decimal precision
-            songDistributions.value = newSelectedSongs.reduce((acc, song) => {
-                acc[song.id] = evenShare;
-                return acc;
-            }, {});
-
-            // Adjust for rounding errors
-            const total = Object.values(songDistributions.value).reduce((sum, val) => sum + val, 0);
-            if (Math.abs(total - 100) > 0.01) {
-                const roundingError = (100 - total) / newSelectedSongs.length;
-                songDistributions.value = newSelectedSongs.reduce((acc, song) => {
-                    acc[song.id] = Math.round((evenShare + roundingError) * 10) / 10;
-                    return acc;
-                }, {});
-            }
-
-            validateDistribution();
-        }
+        isDistributionValid.value = Math.abs(total - 100) < 0.01;
     }
 
     function removeSong(songId) {
         const remainingSongs = selectedSongs.value.filter((song) => song.id !== songId);
         selectedSongs.value = remainingSongs;
+        initializeDistributions(remainingSongs);
+    }
 
-        if (remainingSongs.length > 1) {
-            const evenShare = Math.floor(1000 / remainingSongs.length) / 10;
-            songDistributions.value = remainingSongs.reduce((acc, song) => {
-                acc[song.id] = evenShare;
-                return acc;
-            }, {});
-
-            // Adjust for rounding errors
-            const total = Object.values(songDistributions.value).reduce((sum, val) => sum + val, 0);
-            if (Math.abs(total - 100) > 0.01) {
-                const roundingError = (100 - total) / remainingSongs.length;
-                songDistributions.value = remainingSongs.reduce((acc, song) => {
-                    acc[song.id] = Math.round((evenShare + roundingError) * 10) / 10;
-                    return acc;
-                }, {});
-            }
-        } else if (remainingSongs.length === 1) {
-            songDistributions.value = { [remainingSongs[0].id]: 100 };
-        } else {
-            songDistributions.value = {};
+    // Trigger growth
+    async function startGrowth() {
+        if (!socket || !socket.connected) {
+            error.value = "Not connected to server. Please try reconnecting.";
+            return;
         }
 
         validateDistribution();
-    }
+        if (!isDistributionValid.value && selectedSongs.value.length > 1) {
+            error.value = "Distribution must equal 100%";
+            return;
+        }
 
-    function isSelected(trackId) {
-        return selectedSongs.value.some((song) => song.id === trackId);
-    }
+        // Upload files and start growth
+        try {
+            for (const song of selectedSongs.value) {
+                if (!song.uploaded) {
+                    await uploadSongFile(song);
+                }
+            }
 
-    function startGrowth() {
-        if (socket && socket.connected) {
+            const songData = selectedSongs.value.map((song) => ({
+                id: song.id,
+                name: song.name,
+                tempo: song.tempo,
+            }));
+
             socket.emit("start-growth", {
                 roomId: props.id,
-                songs: selectedSongs.value,
+                songs: songData,
                 growthTime: parseInt(growthTime.value),
                 distributions: songDistributions.value,
             });
-        } else {
-            error.value = "Not connected to server. Please try reconnecting.";
+        } catch (err) {
+            error.value = "Error uploading files: " + err.message;
         }
     }
 
     // Playback control functions
-    function togglePlayback() {
-        if (socket && socket.connected) {
-            console.log("Toggling playback");
-            socket.emit("toggle-playback", { roomId: props.id });
-        }
-    }
-
-    function nextSong() {
-        if (socket && socket.connected) {
-            socket.emit("next-song", { roomId: props.id });
-        }
-    }
-
-    function previousSong() {
-        if (socket && socket.connected) {
-            socket.emit("previous-song", { roomId: props.id });
-        }
-    }
-
     function toggleMute() {
         if (musicVolume.value > 0) {
             previousVolume.value = musicVolume.value;
@@ -677,47 +552,15 @@
     }
 
     function resetState() {
-        searchResults.value = [];
-        searchQuery.value = "";
-        error.value = "";
-        spotifyToken.value = null;
-        socketId.value = null;
         selectedSongs.value = [];
+        error.value = "";
+        socketId.value = null;
         musicVolume.value = 50;
         previousVolume.value = 50;
         growthTime.value = "120";
         songDistributions.value = {};
         isDistributionValid.value = false;
     }
-
-    // Watchers for state changes
-    watch(selectedSongs, (newSongs) => {
-        if (socket && socket.connected) {
-            socket.emit("update-songs", {
-                roomId: props.id,
-                songs: newSongs,
-                distributions: songDistributions.value,
-            });
-        }
-
-        // Reset distributions when songs change
-        if (newSongs.length === 1) {
-            songDistributions.value = { [newSongs[0].id]: 100 };
-            isDistributionValid.value = true;
-        } else if (newSongs.length > 1) {
-            // Initialize even distribution
-            const evenShare = Math.floor(100 / newSongs.length);
-            const remainder = 100 - evenShare * newSongs.length;
-            songDistributions.value = newSongs.reduce((acc, song, index) => {
-                acc[song.id] = evenShare + (index === 0 ? remainder : 0);
-                return acc;
-            }, {});
-            validateDistribution();
-        } else {
-            songDistributions.value = {};
-            isDistributionValid.value = false;
-        }
-    });
 
     watch(musicVolume, (newVolume) => {
         if (socket && socket.connected) {
@@ -731,16 +574,6 @@
     onMounted(() => {
         resetState();
         socket = initializeSocket();
-
-        // Handle Spotify token from redirect
-        const token = route.query.spotifyToken;
-        if (token) {
-            console.log("Received Spotify token from redirect");
-            spotifyToken.value = token;
-            socket.emit("spotify-token", { roomId: props.id, token });
-            router.replace({ path: route.path });
-            verifyToken(token);
-        }
     });
 
     onUnmounted(() => {

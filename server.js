@@ -3,6 +3,11 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
+import fs from "fs";
+import path from "path";
+
+// Map to store file chunks
+const fileChunks = new Map();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -106,6 +111,10 @@ io.on("connection", (socket) => {
         socket.emit("get-client-type");
     });
 
+    socket.on("mobile-joined-room", (roomId) => {
+        io.to(roomId).emit("mobile-joined-room");
+    });
+
     socket.on("client-type-response", (clientType) => {
         console.log(`Received client type for ${socket.id}: ${clientType}`);
 
@@ -151,6 +160,54 @@ io.on("connection", (socket) => {
         if (room) {
             room.setSpotifyToken(token);
             io.to(roomId).emit("spotify-token-updated", { token });
+        }
+    });
+
+    // Handle file metadata
+    socket.on("file-meta", (data) => {
+        console.log("Received file metadata:", data);
+        const { roomId, songId, filename, fileSize } = data;
+
+        // Initialize chunk storage for this file
+        if (!fileChunks.has(songId)) {
+            fileChunks.set(songId, {
+                chunks: [],
+                size: fileSize,
+                received: 0,
+            });
+        }
+
+        // Forward metadata to desktop client
+        socket.to(roomId).emit("file-meta", { songId, filename, fileSize });
+    });
+
+    // Handle file chunks
+    socket.on("file-chunk", (data) => {
+        console.log("Received file chunk:", data);
+        const { roomId, songId, data: chunkData, offset, final } = data;
+
+        const fileData = fileChunks.get(songId);
+        if (fileData) {
+            // Store chunk
+            fileData.chunks.push({
+                data: chunkData,
+                offset: offset,
+            });
+            fileData.received += chunkData.byteLength;
+
+            // Forward chunk to desktop client
+            socket.to(roomId).emit("file-chunk", {
+                songId,
+                data: chunkData,
+                offset,
+                final,
+            });
+
+            // Clean up if this is the final chunk
+            if (final) {
+                socket.emit("file-received", { songId });
+                fileChunks.delete(songId);
+            }
         }
     });
 
