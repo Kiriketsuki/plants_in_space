@@ -224,6 +224,25 @@
                                 {{ musicVolume }}
                             </span>
                         </div>
+                        <!-- Gyroscope Toggle -->
+                        <div
+                            v-if="isDeviceOrientation"
+                            class="flex items-center justify-between text-white text-sm mb-2">
+                            <span>Use Gyroscope Control</span>
+                            <button
+                                @click="useGyroscope = !useGyroscope"
+                                class="px-3 py-1 rounded"
+                                :class="useGyroscope ? 'bg-green-500' : 'bg-gray-600'">
+                                {{ useGyroscope ? "Enabled" : "Disabled" }}
+                            </button>
+                        </div>
+
+                        <!-- Optional calibration message -->
+                        <div
+                            v-if="useGyroscope"
+                            class="text-gray-400 text-xs mb-2">
+                            Hold your device flat and tilt left or right to control the music direction
+                        </div>
 
                         <!-- Direction Control -->
                         <div class="flex flex-col space-y-2">
@@ -295,8 +314,12 @@
     const isDistributionValid = ref(false);
 
     const musicDirection = ref(50);
-    const leftVolume = computed(() => musicDirection.value);
-    const rightVolume = computed(() => 100 - musicDirection.value);
+    const leftVolume = computed(() => 100 - musicDirection.value);
+    const rightVolume = computed(() => musicDirection.value);
+
+    const isDeviceOrientation = ref(false);
+    const isGyroscopeEnabled = ref(false);
+    const useGyroscope = ref(false);
 
     let debounceTimeout;
 
@@ -315,8 +338,8 @@
 
     // Socket Functions
     function initializeSocket() {
-        const url = `http://${window.location.hostname}:3000`;
-        // const url = "https://plants-in-space-socket.onrender.com";
+        // const url = `http://${window.location.hostname}:3000`;
+        const url = "https://plants-in-space-socket.onrender.com";
         connectionStatus.value = "Connecting";
 
         if (socket) {
@@ -692,11 +715,87 @@
     }
 
     function updateMusicDirection() {
-        console.log("Direction updated:", musicDirection.value);
         socket.emit("music-direction-updated", {
             roomId: props.id,
             direction: musicDirection.value,
         });
+    }
+
+    // Gyroscope Functions
+    function checkDeviceOrientation() {
+        return new Promise((resolve) => {
+            if (typeof DeviceOrientationEvent !== "undefined") {
+                // Check if device orientation permission is needed (iOS 13+)
+                if (typeof DeviceOrientationEvent.requestPermission === "function") {
+                    isDeviceOrientation.value = true;
+                    resolve(true);
+                } else {
+                    // Android and older iOS devices
+                    window.addEventListener("deviceorientation", function handler(event) {
+                        window.removeEventListener("deviceorientation", handler);
+                        isDeviceOrientation.value = Boolean(event && event.gamma);
+                        resolve(Boolean(event && event.gamma));
+                    });
+                }
+            } else {
+                isDeviceOrientation.value = false;
+                resolve(false);
+            }
+        });
+    }
+
+    async function requestGyroscopePermission() {
+        try {
+            if (typeof DeviceOrientationEvent.requestPermission === "function") {
+                // iOS 13+ devices
+                const permission = await DeviceOrientationEvent.requestPermission();
+                isGyroscopeEnabled.value = permission === "granted";
+                if (permission === "granted") {
+                    initializeGyroscope();
+                }
+            } else {
+                // Android and older iOS devices
+                isGyroscopeEnabled.value = true;
+                initializeGyroscope();
+            }
+        } catch (error) {
+            console.error("Error requesting gyroscope permission:", error);
+            isGyroscopeEnabled.value = false;
+        }
+    }
+
+    function initializeGyroscope() {
+        if (!isGyroscopeEnabled.value) return;
+
+        window.addEventListener("deviceorientation", handleOrientation);
+    }
+
+    function handleOrientation(event) {
+        if (!useGyroscope.value) return;
+
+        // gamma is the left-to-right tilt in degrees
+        // When phone is vertical and facing user:
+        // - Neutral position: gamma ≈ 0
+        // - Tilting left: gamma becomes negative (down to -90)
+        // - Tilting right: gamma becomes positive (up to 90)
+        const gamma = event.gamma;
+
+        // Use a comfortable range of ±45 degrees for control
+        let normalizedValue;
+        if (gamma < -90) {
+            normalizedValue = 0; // Fully left
+        } else if (gamma > 90) {
+            normalizedValue = 100; // Fully right
+        } else {
+            // Map -45 to +45 range to 0-100
+            normalizedValue = ((gamma + 90) / 180) * 100;
+        }
+
+        // Add smoothing to prevent jitter
+        if (Math.abs(musicDirection.value - normalizedValue) > 1) {
+            musicDirection.value = Math.round(normalizedValue);
+            updateMusicDirection();
+        }
     }
 
     function resetState() {
@@ -719,15 +818,24 @@
         }
     });
 
-    onMounted(() => {
+    onMounted(async () => {
         resetState();
         socket = initializeSocket();
+
+        // Check if device supports orientation
+        const hasOrientation = await checkDeviceOrientation();
+        if (hasOrientation) {
+            await requestGyroscopePermission();
+        }
     });
 
     onUnmounted(() => {
         if (socket) {
             socket.disconnect();
             socket = null;
+        }
+        if (isGyroscopeEnabled.value) {
+            window.removeEventListener("deviceorientation", handleOrientation);
         }
         resetState();
     });

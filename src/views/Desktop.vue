@@ -189,8 +189,8 @@
 
     // Socket initialization
     function initializeSocket() {
-        const url = `http://${window.location.hostname}:3000`;
-        // const url = "https://plants-in-space-socket.onrender.com";
+        // const url = `http://${window.location.hostname}:3000`;
+        const url = "https://plants-in-space-socket.onrender.com";
         connectionStatus.value = "Connecting";
 
         socket.value = io(url, {
@@ -605,7 +605,7 @@
             leftGainNode.value.gain.value = leftGain;
             rightGainNode.value.gain.value = rightGain;
 
-            console.log("Updated channel volumes:", { leftGain, rightGain });
+            // console.log("Updated channel volumes:", { leftGain, rightGain });
         }
     }
 
