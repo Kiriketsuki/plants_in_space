@@ -269,7 +269,8 @@
 
     // Socket Functions
     function initializeSocket() {
-        const url = `http://${window.location.hostname}:3000`;
+        // const url = `http://${window.location.hostname}:3000`;
+        const url = "https://plants-in-space-socket.onrender.com";
         connectionStatus.value = "Connecting";
 
         if (socket) {
