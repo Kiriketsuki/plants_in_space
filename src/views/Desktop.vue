@@ -132,6 +132,30 @@
                             </div>
                         </div>
                     </div>
+
+                    <div class="bg-gray-800/90 rounded-lg p-4 max-w-full text-white">
+                        <h2 class="text-xl font-bold mb-2">Detected Notes</h2>
+                        <div class="space-y-2">
+                            <div
+                                v-if="detectedNotes.length"
+                                class="flex flex-row w-full h-[22vh] overflow-hidden flex-wrap justify-between">
+                                <div
+                                    v-for="note in detectedNotes"
+                                    :key="note.name"
+                                    class="bg-gray-700 w-1/6 h-[10vh] rounded p-2 flex justify-between items-center m-2">
+                                    <span class="font-medium">{{ note.name }}</span>
+                                    <div class="text-sm text-gray-300">
+                                        <span>{{ note.frequency }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div
+                                v-else
+                                class="text-gray-400 text-sm">
+                                No notes detected
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -174,6 +198,110 @@
     const rightGainNode = ref(null);
 
     const mobileUrl = `${window.location.origin}/mobile/${props.id}`;
+
+    // Analysis
+    const detectedNotes = ref([]);
+    const notes = [
+        { name: "C0", freq: 16.35 },
+        { name: "C#0", freq: 17.32 },
+        { name: "D0", freq: 18.35 },
+        { name: "D#0", freq: 19.45 },
+        { name: "E0", freq: 20.6 },
+        { name: "F0", freq: 21.83 },
+        { name: "F#0", freq: 23.12 },
+        { name: "G0", freq: 24.5 },
+        { name: "G#0", freq: 25.96 },
+        { name: "A0", freq: 27.5 },
+        { name: "A#0", freq: 29.14 },
+        { name: "B0", freq: 30.87 },
+
+        { name: "C1", freq: 32.7 },
+        { name: "C#1", freq: 34.65 },
+        { name: "D1", freq: 36.71 },
+        { name: "D#1", freq: 38.89 },
+        { name: "E1", freq: 41.2 },
+        { name: "F1", freq: 43.65 },
+        { name: "F#1", freq: 46.25 },
+        { name: "G1", freq: 49.0 },
+        { name: "G#1", freq: 51.91 },
+        { name: "A1", freq: 55.0 },
+        { name: "A#1", freq: 58.27 },
+        { name: "B1", freq: 61.74 },
+
+        { name: "C2", freq: 65.41 },
+        { name: "C#2", freq: 69.3 },
+        { name: "D2", freq: 73.42 },
+        { name: "D#2", freq: 77.78 },
+        { name: "E2", freq: 82.41 },
+        { name: "F2", freq: 87.31 },
+        { name: "F#2", freq: 92.5 },
+        { name: "G2", freq: 98.0 },
+        { name: "G#2", freq: 103.83 },
+        { name: "A2", freq: 110.0 },
+        { name: "A#2", freq: 116.54 },
+        { name: "B2", freq: 123.47 },
+
+        { name: "C3", freq: 130.81 },
+        { name: "C#3", freq: 138.59 },
+        { name: "D3", freq: 146.83 },
+        { name: "D#3", freq: 155.56 },
+        { name: "E3", freq: 164.81 },
+        { name: "F3", freq: 174.61 },
+        { name: "F#3", freq: 185.0 },
+        { name: "G3", freq: 196.0 },
+        { name: "G#3", freq: 207.65 },
+        { name: "A3", freq: 220.0 },
+        { name: "A#3", freq: 233.08 },
+        { name: "B3", freq: 246.94 },
+
+        { name: "C4", freq: 261.63 },
+        { name: "C#4", freq: 277.18 },
+        { name: "D4", freq: 293.66 },
+        { name: "D#4", freq: 311.13 },
+        { name: "E4", freq: 329.63 },
+        { name: "F4", freq: 349.23 },
+        { name: "F#4", freq: 369.99 },
+        { name: "G4", freq: 392.0 },
+        { name: "G#4", freq: 415.3 },
+        { name: "A4", freq: 440.0 },
+        { name: "A#4", freq: 466.16 },
+        { name: "B4", freq: 493.88 },
+
+        { name: "C5", freq: 523.25 },
+        { name: "C#5", freq: 554.37 },
+        { name: "D5", freq: 587.33 },
+        { name: "D#5", freq: 622.25 },
+        { name: "E5", freq: 659.25 },
+        { name: "F5", freq: 698.46 },
+        { name: "F#5", freq: 739.99 },
+        { name: "G5", freq: 783.99 },
+        { name: "G#5", freq: 830.61 },
+        { name: "A5", freq: 880.0 },
+        { name: "A#5", freq: 932.33 },
+        { name: "B5", freq: 987.77 },
+
+        { name: "C6", freq: 1046.5 },
+        { name: "C#6", freq: 1108.73 },
+        { name: "D6", freq: 1174.66 },
+        { name: "D#6", freq: 1244.51 },
+        { name: "E6", freq: 1318.51 },
+        { name: "F6", freq: 1396.91 },
+        { name: "F#6", freq: 1479.98 },
+        { name: "G6", freq: 1567.98 },
+        { name: "G#6", freq: 1661.22 },
+        { name: "A6", freq: 1760.0 },
+        { name: "A#6", freq: 1864.66 },
+        { name: "B6", freq: 1975.53 },
+
+        { name: "C7", freq: 2093.0 },
+        { name: "C#7", freq: 2217.46 },
+        { name: "D7", freq: 2349.32 },
+        { name: "D#7", freq: 2489.02 },
+        { name: "E7", freq: 2637.02 },
+        { name: "F7", freq: 2793.83 },
+        { name: "F#7", freq: 2959.96 },
+        { name: "G7", freq: 3135.96 },
+    ];
 
     // Computed properties
     const allFilesLoaded = computed(() => {
@@ -533,24 +661,114 @@
             const splitter = audioContext.value.createChannelSplitter(2);
             const merger = audioContext.value.createChannelMerger(2);
 
-            // Create separate gain nodes for left and right channels
+            // Create analyzer node
+            const analyzer = audioContext.value.createAnalyser();
+            analyzer.fftSize = 2048;
+            const bufferLength = analyzer.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            // Create gain nodes
             leftGainNode.value = audioContext.value.createGain();
             rightGainNode.value = audioContext.value.createGain();
 
-            // Set up the audio routing
+            // Modified audio routing to fix connection error
             source.buffer = audioBuffer;
-            source.connect(splitter);
 
-            // Connect left channel
+            // Connect source to analyzer first
+            source.connect(analyzer);
+
+            // Connect analyzer to splitter
+            analyzer.connect(splitter);
+
+            // Connect split channels to respective gain nodes
             splitter.connect(leftGainNode.value, 0);
-            leftGainNode.value.connect(merger, 0, 0);
-
-            // Connect right channel
             splitter.connect(rightGainNode.value, 1);
+
+            // Connect gain nodes to merger
+            leftGainNode.value.connect(merger, 0, 0);
             rightGainNode.value.connect(merger, 0, 1);
 
             // Connect merger to destination
             merger.connect(audioContext.value.destination);
+
+            function findSignificantFrequencies(spectrum) {
+                const AMPLITUDE_THRESHOLD = 200; // Adjusted threshold
+                let frequencies = [];
+                let bandStart = -1;
+                let bandEnd = -1;
+
+                for (let i = 0; i < spectrum.length; i++) {
+                    if (spectrum[i] > AMPLITUDE_THRESHOLD) {
+                        if (bandStart === -1) bandStart = i;
+                        bandEnd = i;
+                    } else if (bandEnd !== -1) {
+                        let centerBin = (bandStart + bandEnd) / 2;
+                        let frequency = (centerBin * audioContext.value.sampleRate) / analyzer.fftSize;
+                        frequencies.push(frequency);
+                        bandStart = -1;
+                        bandEnd = -1;
+                    }
+                }
+
+                if (bandStart !== -1 && bandEnd !== -1) {
+                    let centerBin = (bandStart + bandEnd) / 2;
+                    let frequency = (centerBin * audioContext.value.sampleRate) / analyzer.fftSize;
+                    frequencies.push(frequency);
+                }
+
+                return frequencies;
+            }
+
+            function findNearestNote(frequency) {
+                let closestNote = notes[0];
+                let minDiff = Math.abs(frequency - closestNote.freq);
+
+                for (let note of notes) {
+                    let diff = Math.abs(frequency - note.freq);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closestNote = note;
+                    }
+                }
+
+                return closestNote;
+            }
+
+            function analyzeAudio() {
+                if (!isPlaying.value) return;
+
+                analyzer.getByteFrequencyData(dataArray);
+
+                // Find significant frequencies
+                const significantFreqs = findSignificantFrequencies(dataArray);
+
+                // Convert frequencies to notes
+                const detected = significantFreqs
+                    .map((freq) => findNearestNote(freq))
+                    .filter((note, index, self) => index === self.findIndex((n) => n.name === note.name))
+                    .sort((a, b) => a.freq - b.freq)
+                    .map((note) => ({
+                        name: note.name,
+                        noteName: note.name.slice(0, -1),
+                        octave: parseInt(note.name.slice(-1)),
+                        frequency: `${note.freq.toFixed(2)} Hz`,
+                    }));
+
+                // Update the reactive ref
+                detectedNotes.value = detected;
+
+                // Still keep the console log if desired
+                if (Date.now() % 500 < 50 && detected.length > 0) {
+                    console.log("Detected Notes:", {
+                        notes: detected,
+                        timestamp: new Date().toISOString(),
+                    });
+                }
+
+                requestAnimationFrame(analyzeAudio);
+            }
+
+            analyzeAudio();
 
             // Set initial volumes
             updateChannelVolumes();
@@ -558,14 +776,12 @@
             source.loop = true;
             source.start(0);
 
-            console.log("Stereo audio playback started:", {
-                bufferDuration: audioBuffer.duration,
-                playbackDuration: duration,
-                leftVolume: leftVolume.value,
-                rightVolume: rightVolume.value,
-            });
-
-            return { source, leftGainNode: leftGainNode.value, rightGainNode: rightGainNode.value };
+            return {
+                source,
+                leftGainNode: leftGainNode.value,
+                rightGainNode: rightGainNode.value,
+                analyzer,
+            };
         } catch (err) {
             console.error("Error in playAudioBuffer:", err);
             audioStatus.value = `Playback Error: ${err.message}`;
