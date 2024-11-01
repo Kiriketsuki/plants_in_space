@@ -83,6 +83,7 @@
                                     <!-- Song Name Input -->
                                     <input
                                         v-model="song.name"
+                                        @input="debouncedGetTempo(song)"
                                         type="text"
                                         class="w-full p-2 border rounded-md mb-2"
                                         placeholder="Song name" />
@@ -236,6 +237,7 @@
 <script setup>
     import { ref, onMounted, onUnmounted, watch, computed } from "vue";
     import { io } from "socket.io-client";
+    import { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET } from "../../secrets";
 
     const props = defineProps(["id"]);
     const error = ref("");
@@ -249,6 +251,8 @@
     const growthTime = ref("120");
     const songDistributions = ref({});
     const isDistributionValid = ref(false);
+
+    let debounceTimeout;
 
     const CHUNK_SIZE = 16384; // 16KB chunks
 
@@ -336,9 +340,8 @@
         fileInput.value.click();
     }
 
-    function handleFileUpload(event) {
+    async function handleFileUpload(event) {
         const files = Array.from(event.target.files);
-
         // Validate file type and count
         const invalidFiles = files.filter((file) => !file.type.includes("audio/mpeg"));
         if (invalidFiles.length > 0) {
@@ -368,6 +371,21 @@
 
         // Initialize distributions after adding songs
         initializeDistributions(selectedSongs.value);
+
+        try {
+            await Promise.all(
+                selectedSongs.value.map(async (song) => {
+                    console.log("Getting tempo for:", song.name);
+                    await getSongTempo(song.name).then((tempoData) => {
+                        console.log("Tempo data:", tempoData);
+                        song.tempo = tempoData.tempo;
+                        song.name = tempoData.trackName;
+                    });
+                }),
+            );
+        } catch (err) {
+            error.value = "Error getting tempo data: " + err.message;
+        }
 
         // Clear the input to allow selecting the same file again
         event.target.value = "";
@@ -495,6 +513,81 @@
     function validateDistribution() {
         const total = totalDistribution.value;
         isDistributionValid.value = Math.abs(total - 100) < 0.01;
+    }
+
+    async function debouncedGetTempo(song) {
+        let name = song.name;
+        clearTimeout(debounceTimeout);
+        debounceTimeout = setTimeout(async () => {
+            console.log("Getting tempo for:", name);
+            getSongTempo(name).then((tempoData) => {
+                console.log("Tempo data:", tempoData);
+                song.tempo = tempoData.tempo;
+                song.name = tempoData.trackName;
+            });
+        }, 500);
+    }
+
+    async function getSongTempo(songName) {
+        try {
+            // Get access token
+            const authResponse = await fetch("https://accounts.spotify.com/api/token", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    Authorization: "Basic " + btoa(SPOTIFY_CLIENT_ID + ":" + SPOTIFY_CLIENT_SECRET),
+                },
+                body: "grant_type=client_credentials",
+            });
+
+            if (!authResponse.ok) {
+                throw new Error("Failed to get access token");
+            }
+
+            const authData = await authResponse.json();
+            const accessToken = authData.access_token;
+            console.log("Access Token:", accessToken);
+
+            // Search for the song
+            const searchResponse = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(songName)}&type=track&limit=1`, {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                },
+            });
+
+            if (!searchResponse.ok) {
+                throw new Error("Failed to search for the song");
+            }
+
+            const searchData = await searchResponse.json();
+
+            if (!searchData.tracks.items.length) {
+                throw new Error("No tracks found");
+            }
+
+            const trackId = searchData.tracks.items[0].id;
+
+            // Get audio features for the track
+            const featuresResponse = await fetch(`https://api.spotify.com/v1/audio-features/${trackId}`, {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                },
+            });
+
+            if (!featuresResponse.ok) {
+                throw new Error("Failed to get audio features");
+            }
+
+            const featuresData = await featuresResponse.json();
+
+            return {
+                tempo: featuresData.tempo,
+                trackName: searchData.tracks.items[0].name,
+            };
+        } catch (error) {
+            console.error("Error:", error.message);
+            return { tempo: 100, trackName: songName };
+        }
     }
 
     function removeSong(songId) {
