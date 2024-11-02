@@ -226,7 +226,7 @@
 
                 // leaf and node setup
 
-                const leafGeometry = new THREE.CircleGeometry(0.15, 32);
+                // const leafGeometry = new THREE.CircleGeometry(0.15, 32);
                 const nodeGeometry = new THREE.SphereGeometry(0.025);
 
                 const nodeColors = {
@@ -271,7 +271,11 @@
                 const loadingManager = new THREE.LoadingManager();
                 const loader = new GLTFLoader(loadingManager);
                 let stalkGeometry = null;
-                let isModelLoaded = false;
+                let branchGeometry = null;
+                let leafGeometry = null;
+                let isStalkLoaded = false;
+                let isBranchLoaded = false;
+                let isLeafLoaded = false;
 
                 // Create a simple material for the stalk
                 const stalkMaterial = new THREE.MeshPhongMaterial({
@@ -280,12 +284,18 @@
                     emissive: 0x222222,
                 });
 
+                const branchMaterial = new THREE.MeshPhongMaterial({
+                    color: 0x228b22, // Green color
+                    shininess: 30,
+                    emissive: 0x1a661a,
+                });
+
                 loader.load(
                     "../assets/stalk.glb",
                     (gltf) => {
                         gltf.scene.traverse((child) => {
                             if (child.isMesh && !stalkGeometry) {
-                                console.log("Found mesh geometry:", child.geometry);
+                                console.log("Found stalk geometry:", child.geometry);
                                 stalkGeometry = child.geometry.clone();
 
                                 // Rotate the base geometry to point upwards
@@ -295,13 +305,48 @@
                                 // stalkGeometry.scale(0.2, 0.2, 0.2);
                                 stalkGeometry.scale(1, 1, 1);
 
-                                isModelLoaded = true;
+                                isStalkLoaded = true;
                             }
                         });
                     },
                     undefined,
                     (error) => {
                         console.error("Error loading model:", error);
+                    },
+                );
+
+                loader.load(
+                    "../assets/branch_test.glb",
+                    (gltf) => {
+                        gltf.scene.traverse((child) => {
+                            if (child.isMesh && !branchGeometry) {
+                                branchGeometry = child.geometry.clone();
+                                // branchGeometry = stalkGeometry.clone();
+                                branchGeometry.scale(1, 1, 1);
+                                isBranchLoaded = true;
+                            }
+                        });
+                    },
+                    undefined,
+                    (error) => {
+                        console.error("Error loading branch model:", error);
+                    },
+                );
+
+                loader.load(
+                    "../assets/leaf.glb",
+                    (gltf) => {
+                        gltf.scene.traverse((child) => {
+                            if (child.isMesh && !leafGeometry) {
+                                leafGeometry = child.geometry.clone();
+                                leafGeometry.scale(0.5, 0.5, 0.5);
+                                isLeafLoaded = true;
+                            }
+                        });
+                    },
+                    undefined,
+                    (error) => {
+                        console.error("Error loading leaf model:", error);
                     },
                 );
 
@@ -349,7 +394,7 @@
                     node.mesh = nodeMesh;
 
                     if (parent && type !== "leaf") {
-                        if (type === "stalk" && isModelLoaded && stalkGeometry) {
+                        if (type === "stalk" && isStalkLoaded && stalkGeometry) {
                             // Create a new mesh using the geometry and material
                             const stalkMesh = new THREE.Mesh(stalkGeometry, stalkMaterial);
 
@@ -402,6 +447,22 @@
                     // - X and Z scale remain constant at 0.2
                     // - Y scale (length) grows based on progress and final distance
                     // - Since mesh is 1 unit long at scale 1, we multiply distance directly
+                    return {
+                        position: position,
+                        rotation: quaternion,
+                        scale: new THREE.Vector3(1, distance * growthProgress, 1),
+                    };
+                }
+
+                function calculateBranchTransform(parent, current, growthProgress = 1) {
+                    const direction = new THREE.Vector3(current.x - parent.x, current.y - parent.y, current.z - parent.z);
+                    const distance = direction.length();
+                    const position = new THREE.Vector3(parent.x, parent.y, parent.z);
+                    const quaternion = new THREE.Quaternion();
+                    const up = new THREE.Vector3(0, 1, 0);
+                    direction.normalize();
+                    quaternion.setFromUnitVectors(up, direction);
+
                     return {
                         position: position,
                         rotation: quaternion,
@@ -795,7 +856,6 @@
                         if (type === "leaf") {
                             parent.leafCount++;
                         }
-                        // Store parent position for stalk animation
                         node.parentPos = {
                             x: parent.x,
                             y: parent.y,
@@ -829,31 +889,29 @@
                     node.mesh = nodeMesh;
 
                     if (parent && type !== "leaf") {
-                        if (type === "stalk" && isModelLoaded && stalkGeometry) {
-                            // Create a new mesh using the geometry and material
+                        if (type === "stalk" && isStalkLoaded && stalkGeometry) {
                             const stalkMesh = new THREE.Mesh(stalkGeometry, stalkMaterial);
-
-                            // Initialize with zero scale
-                            const transform = calculateStalkTransform(
-                                node.parentPos, // Use stored parent position
-                                { x, y, z }, // Current position
-                                0, // Start with zero growth
-                            );
-
+                            const transform = calculateStalkTransform(node.parentPos, { x, y, z }, 0);
                             stalkMesh.position.copy(transform.position);
                             stalkMesh.quaternion.copy(transform.rotation);
                             stalkMesh.scale.copy(transform.scale);
-
                             nodeObjects.add(stalkMesh);
                             node.connectionMesh = stalkMesh;
                             node.connectionLine = null;
+                        } else if (type === "branch" && isBranchLoaded && branchGeometry) {
+                            const branchMesh = new THREE.Mesh(branchGeometry, branchMaterial);
+                            const transform = calculateBranchTransform(node.parentPos, { x, y, z }, 0);
+                            branchMesh.position.copy(transform.position);
+                            branchMesh.quaternion.copy(transform.rotation);
+                            branchMesh.scale.copy(transform.scale);
+                            nodeObjects.add(branchMesh);
+                            node.connectionMesh = branchMesh;
+                            node.connectionLine = null;
                         } else {
-                            // Fallback to line if model isn't loaded or for non-stalk types
                             const connectionGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(parent.x, parent.y, parent.z), new THREE.Vector3(x, y, z)]);
                             const connectionMaterial = new THREE.LineBasicMaterial({ color: nodeColor });
                             const connectionLine = new THREE.Line(connectionGeometry, connectionMaterial);
                             connectionObjects.add(connectionLine);
-
                             node.connectionLine = connectionLine;
                             node.connectionMesh = null;
                         }
@@ -913,10 +971,8 @@
                             const remainingDistanceX = Math.abs(currentNode.targetX - currentNode.x);
                             const remainingDistanceZ = Math.abs(currentNode.targetZ - currentNode.z);
 
-                            // Only calculate distances if we have parent position
                             let growthProgress = 0;
                             if (currentNode.parentPos) {
-                                // Calculate total distance and current progress for growth animation
                                 const totalDistance = Math.sqrt(Math.pow(currentNode.targetX - currentNode.parentPos.x, 2) + Math.pow(currentNode.targetY - currentNode.parentPos.y, 2) + Math.pow(currentNode.targetZ - currentNode.parentPos.z, 2));
 
                                 const currentDistance = Math.sqrt(Math.pow(currentNode.x - currentNode.parentPos.x, 2) + Math.pow(currentNode.y - currentNode.parentPos.y, 2) + Math.pow(currentNode.z - currentNode.parentPos.z, 2));
@@ -925,6 +981,7 @@
                             }
 
                             if (remainingDistanceY > moveAmount || remainingDistanceX > moveAmount || remainingDistanceZ > moveAmount) {
+                                // Update position
                                 if (remainingDistanceY > moveAmount) {
                                     const directionY = currentNode.targetY > currentNode.y ? 1 : -1;
                                     currentNode.y += moveAmount * directionY;
@@ -940,7 +997,7 @@
 
                                 currentNode.mesh.position.set(currentNode.x, currentNode.y, currentNode.z);
 
-                                // Update stalk mesh or connection line
+                                // Update connection visualization
                                 if (currentNode.connectionMesh && currentNode.parentPos) {
                                     const currentPos = {
                                         x: currentNode.x,
@@ -948,10 +1005,8 @@
                                         z: currentNode.z,
                                     };
 
-                                    // Get transform based on current growth
-                                    const transform = calculateStalkTransform(currentNode.parentPos, currentPos, growthProgress);
+                                    const transform = currentNode.type === "branch" ? calculateBranchTransform(currentNode.parentPos, currentPos, growthProgress) : calculateStalkTransform(currentNode.parentPos, currentPos, growthProgress);
 
-                                    // Apply transform
                                     currentNode.connectionMesh.position.copy(transform.position);
                                     currentNode.connectionMesh.quaternion.copy(transform.rotation);
                                     currentNode.connectionMesh.scale.copy(transform.scale);
@@ -969,9 +1024,9 @@
                                 currentNode.z = currentNode.targetZ;
                                 currentNode.mesh.position.set(currentNode.x, currentNode.y, currentNode.z);
 
-                                // Final update for connection mesh or line
                                 if (currentNode.connectionMesh && currentNode.parentPos) {
-                                    const finalTransform = calculateStalkTransform(currentNode.parentPos, currentNode, 1);
+                                    const finalTransform = currentNode.type === "branch" ? calculateBranchTransform(currentNode.parentPos, currentNode, 1) : calculateStalkTransform(currentNode.parentPos, currentNode, 1);
+
                                     currentNode.connectionMesh.position.copy(finalTransform.position);
                                     currentNode.connectionMesh.quaternion.copy(finalTransform.rotation);
                                     currentNode.connectionMesh.scale.copy(finalTransform.scale);
@@ -1014,7 +1069,7 @@
                     camera.lookAt(cameraTarget);
                     renderer.render(scene, camera);
 
-                    if (time > 5000 && isModelLoaded) {
+                    if (time > 1000 && isStalkLoaded && isBranchLoaded) {
                         animatePlant(deltaTime);
                     }
                 }
