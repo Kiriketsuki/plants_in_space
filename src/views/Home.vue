@@ -31,6 +31,7 @@
             this.leafCount = 0;
             this.mesh = null;
             this.modelScale = { y: 0 };
+            this.parentPos = null;
         }
 
         calculateDepth() {
@@ -226,7 +227,7 @@
                 // leaf and node setup
 
                 const leafGeometry = new THREE.CircleGeometry(0.15, 32);
-                const nodeGeometry = new THREE.SphereGeometry(0.051);
+                const nodeGeometry = new THREE.SphereGeometry(0.025);
 
                 const nodeColors = {
                     seed: 0x8b4513,
@@ -288,11 +289,11 @@
                                 stalkGeometry = child.geometry.clone();
 
                                 // Rotate the base geometry to point upwards
-                                stalkGeometry.rotateZ(Math.PI / 2);
+                                // stalkGeometry.rotateZ(Math.PI);
 
                                 // Set the base scale to 0.1
                                 // stalkGeometry.scale(0.2, 0.2, 0.2);
-                                stalkGeometry.scale(1, 0.8, 1);
+                                stalkGeometry.scale(1, 1, 1);
 
                                 isModelLoaded = true;
                             }
@@ -314,6 +315,12 @@
                         if (type === "leaf") {
                             parent.leafCount++;
                         }
+                        // Store parent position for stalk animation
+                        node.parentPos = {
+                            x: parent.x,
+                            y: parent.y,
+                            z: parent.z,
+                        };
                     }
 
                     if (targetPos) {
@@ -327,7 +334,6 @@
 
                     let nodeMesh;
                     if (type === "leaf") {
-                        // Leaf handling remains unchanged
                         nodeMesh = new THREE.Mesh(leafGeometry, nodeMaterial);
                         nodeMesh.scale.set(0, 0, 0);
                         node.targetScale = 1;
@@ -348,7 +354,12 @@
                             const stalkMesh = new THREE.Mesh(stalkGeometry, stalkMaterial);
 
                             // Initialize with zero scale
-                            const transform = calculateStalkTransform(parent, node, 0);
+                            const transform = calculateStalkTransform(
+                                node.parentPos, // Use stored parent position
+                                { x, y, z }, // Current position
+                                0, // Start with zero growth
+                            );
+
                             stalkMesh.position.copy(transform.position);
                             stalkMesh.quaternion.copy(transform.rotation);
                             stalkMesh.scale.copy(transform.scale);
@@ -356,16 +367,6 @@
                             nodeObjects.add(stalkMesh);
                             node.connectionMesh = stalkMesh;
                             node.connectionLine = null;
-
-                            // Store parent position for animation
-                            node.parentPos = {
-                                x: parent.x,
-                                y: parent.y,
-                                z: parent.z,
-                            };
-
-                            // Initialize growth progress
-                            node.growthProgress = 0;
                         } else {
                             // Fallback to line if model isn't loaded or for non-stalk types
                             const connectionGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(parent.x, parent.y, parent.z), new THREE.Vector3(x, y, z)]);
@@ -381,15 +382,15 @@
                     return node;
                 }
 
-                function calculateStalkTransform(parent, current, scale = 1) {
+                function calculateStalkTransform(parent, current, growthProgress = 1) {
                     // Calculate direction vector from parent to current
                     const direction = new THREE.Vector3(current.x - parent.x, current.y - parent.y, current.z - parent.z);
 
-                    // Calculate the distance between points
+                    // Calculate the final distance between points - this will be our target scale
                     const distance = direction.length();
 
-                    // Calculate the midpoint for positioning
-                    const midpoint = new THREE.Vector3(parent.x + direction.x * 0.5, parent.y + direction.y * 0.5, parent.z + direction.z * 0.5);
+                    // Position stays at parent point
+                    const position = new THREE.Vector3(parent.x, parent.y, parent.z);
 
                     // Calculate rotation to align with direction
                     const quaternion = new THREE.Quaternion();
@@ -397,10 +398,14 @@
                     direction.normalize();
                     quaternion.setFromUnitVectors(up, direction);
 
+                    // Scale:
+                    // - X and Z scale remain constant at 0.2
+                    // - Y scale (length) grows based on progress and final distance
+                    // - Since mesh is 1 unit long at scale 1, we multiply distance directly
                     return {
-                        position: midpoint,
+                        position: position,
                         rotation: quaternion,
-                        scale: new THREE.Vector3(0.2, distance * scale, 0.2),
+                        scale: new THREE.Vector3(1, distance * growthProgress, 1),
                     };
                 }
 
@@ -781,6 +786,82 @@
                 let lastStalkHeight = 0;
                 let currentNode = null;
 
+                function addNode(x, y, z, type, parent = null, targetPos = null) {
+                    const node = new Node(x, y, z, type, parent);
+                    nodes[type].push(node);
+
+                    if (parent) {
+                        parent.addChild(node);
+                        if (type === "leaf") {
+                            parent.leafCount++;
+                        }
+                        // Store parent position for stalk animation
+                        node.parentPos = {
+                            x: parent.x,
+                            y: parent.y,
+                            z: parent.z,
+                        };
+                    }
+
+                    if (targetPos) {
+                        node.targetX = targetPos.x;
+                        node.targetY = targetPos.y;
+                        node.targetZ = targetPos.z;
+                    }
+
+                    const nodeColor = nodeColors[type];
+                    const nodeMaterial = new THREE.MeshPhongMaterial({ color: nodeColor });
+
+                    let nodeMesh;
+                    if (type === "leaf") {
+                        nodeMesh = new THREE.Mesh(leafGeometry, nodeMaterial);
+                        nodeMesh.scale.set(0, 0, 0);
+                        node.targetScale = 1;
+                        nodeMesh.rotation.x = Math.random() * Math.PI;
+                        nodeMesh.rotation.y = Math.random() * Math.PI;
+                        nodeMesh.rotation.z = Math.random() * Math.PI;
+                    } else {
+                        nodeMesh = new THREE.Mesh(nodeGeometry, nodeMaterial);
+                    }
+
+                    nodeMesh.position.set(x, y, z);
+                    nodeObjects.add(nodeMesh);
+                    node.mesh = nodeMesh;
+
+                    if (parent && type !== "leaf") {
+                        if (type === "stalk" && isModelLoaded && stalkGeometry) {
+                            // Create a new mesh using the geometry and material
+                            const stalkMesh = new THREE.Mesh(stalkGeometry, stalkMaterial);
+
+                            // Initialize with zero scale
+                            const transform = calculateStalkTransform(
+                                node.parentPos, // Use stored parent position
+                                { x, y, z }, // Current position
+                                0, // Start with zero growth
+                            );
+
+                            stalkMesh.position.copy(transform.position);
+                            stalkMesh.quaternion.copy(transform.rotation);
+                            stalkMesh.scale.copy(transform.scale);
+
+                            nodeObjects.add(stalkMesh);
+                            node.connectionMesh = stalkMesh;
+                            node.connectionLine = null;
+                        } else {
+                            // Fallback to line if model isn't loaded or for non-stalk types
+                            const connectionGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(parent.x, parent.y, parent.z), new THREE.Vector3(x, y, z)]);
+                            const connectionMaterial = new THREE.LineBasicMaterial({ color: nodeColor });
+                            const connectionLine = new THREE.Line(connectionGeometry, connectionMaterial);
+                            connectionObjects.add(connectionLine);
+
+                            node.connectionLine = connectionLine;
+                            node.connectionMesh = null;
+                        }
+                    }
+
+                    return node;
+                }
+
                 function animatePlant(deltaTime) {
                     const maxIndex = Math.max(...Object.keys(growthConfig).map(Number));
 
@@ -807,7 +888,6 @@
                                 if (type === "stalk") {
                                     if (currentNode.height > lastStalkHeight) {
                                         lastStalkHeight = currentNode.height;
-                                        // animateCameraForStalk();
                                     }
                                 }
                             }
@@ -828,11 +908,21 @@
                                 currentNode = null;
                             }
                         } else {
-                            // Handle regular node movement animation
                             const moveAmount = (currentNode.moveSpeed * deltaTime) / (1000 / ANIM_SPEED);
                             const remainingDistanceY = Math.abs(currentNode.targetY - currentNode.y);
                             const remainingDistanceX = Math.abs(currentNode.targetX - currentNode.x);
                             const remainingDistanceZ = Math.abs(currentNode.targetZ - currentNode.z);
+
+                            // Only calculate distances if we have parent position
+                            let growthProgress = 0;
+                            if (currentNode.parentPos) {
+                                // Calculate total distance and current progress for growth animation
+                                const totalDistance = Math.sqrt(Math.pow(currentNode.targetX - currentNode.parentPos.x, 2) + Math.pow(currentNode.targetY - currentNode.parentPos.y, 2) + Math.pow(currentNode.targetZ - currentNode.parentPos.z, 2));
+
+                                const currentDistance = Math.sqrt(Math.pow(currentNode.x - currentNode.parentPos.x, 2) + Math.pow(currentNode.y - currentNode.parentPos.y, 2) + Math.pow(currentNode.z - currentNode.parentPos.z, 2));
+
+                                growthProgress = currentDistance / totalDistance;
+                            }
 
                             if (remainingDistanceY > moveAmount || remainingDistanceX > moveAmount || remainingDistanceZ > moveAmount) {
                                 if (remainingDistanceY > moveAmount) {
@@ -850,19 +940,16 @@
 
                                 currentNode.mesh.position.set(currentNode.x, currentNode.y, currentNode.z);
 
-                                // In animatePlant, replace the connectionMesh update code with:
-                                if (currentNode.connectionMesh) {
+                                // Update stalk mesh or connection line
+                                if (currentNode.connectionMesh && currentNode.parentPos) {
                                     const currentPos = {
                                         x: currentNode.x,
                                         y: currentNode.y,
                                         z: currentNode.z,
                                     };
 
-                                    // Calculate growth progress
-                                    currentNode.growthProgress = Math.min(1, currentNode.growthProgress + moveAmount / 2);
-
                                     // Get transform based on current growth
-                                    const transform = calculateStalkTransform(currentNode.parentPos, currentPos, currentNode.growthProgress);
+                                    const transform = calculateStalkTransform(currentNode.parentPos, currentPos, growthProgress);
 
                                     // Apply transform
                                     currentNode.connectionMesh.position.copy(transform.position);
@@ -876,12 +963,19 @@
                                     currentNode.connectionLine.geometry.attributes.position.needsUpdate = true;
                                 }
                             } else {
+                                // Final position reached
                                 currentNode.x = currentNode.targetX;
                                 currentNode.y = currentNode.targetY;
                                 currentNode.z = currentNode.targetZ;
                                 currentNode.mesh.position.set(currentNode.x, currentNode.y, currentNode.z);
 
-                                if (currentNode.connectionLine) {
+                                // Final update for connection mesh or line
+                                if (currentNode.connectionMesh && currentNode.parentPos) {
+                                    const finalTransform = calculateStalkTransform(currentNode.parentPos, currentNode, 1);
+                                    currentNode.connectionMesh.position.copy(finalTransform.position);
+                                    currentNode.connectionMesh.quaternion.copy(finalTransform.rotation);
+                                    currentNode.connectionMesh.scale.copy(finalTransform.scale);
+                                } else if (currentNode.connectionLine) {
                                     const positions = currentNode.connectionLine.geometry.attributes.position.array;
                                     positions[3] = currentNode.x;
                                     positions[4] = currentNode.y;
