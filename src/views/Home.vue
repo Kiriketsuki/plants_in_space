@@ -32,6 +32,7 @@
             this.mesh = null;
             this.modelScale = { y: 0 };
             this.parentPos = null;
+            this.directionVector = new THREE.Vector3();
         }
 
         calculateDepth() {
@@ -297,12 +298,6 @@
                             if (child.isMesh && !stalkGeometry) {
                                 console.log("Found stalk geometry:", child.geometry);
                                 stalkGeometry = child.geometry.clone();
-
-                                // Rotate the base geometry to point upwards
-                                // stalkGeometry.rotateZ(Math.PI);
-
-                                // Set the base scale to 0.1
-                                // stalkGeometry.scale(0.2, 0.2, 0.2);
                                 stalkGeometry.scale(1, 1, 1);
 
                                 isStalkLoaded = true;
@@ -321,7 +316,6 @@
                         gltf.scene.traverse((child) => {
                             if (child.isMesh && !branchGeometry) {
                                 branchGeometry = child.geometry.clone();
-                                // branchGeometry = stalkGeometry.clone();
                                 branchGeometry.scale(1, 1, 1);
                                 isBranchLoaded = true;
                             }
@@ -339,6 +333,7 @@
                         gltf.scene.traverse((child) => {
                             if (child.isMesh && !leafGeometry) {
                                 leafGeometry = child.geometry.clone();
+                                leafGeometry.rotateY(Math.PI / 2);
                                 leafGeometry.scale(0.5, 0.5, 0.5);
                                 isLeafLoaded = true;
                             }
@@ -349,83 +344,6 @@
                         console.error("Error loading leaf model:", error);
                     },
                 );
-
-                // Modify the addNode function's stalk handling
-                function addNode(x, y, z, type, parent = null, targetPos = null) {
-                    const node = new Node(x, y, z, type, parent);
-                    nodes[type].push(node);
-
-                    if (parent) {
-                        parent.addChild(node);
-                        if (type === "leaf") {
-                            parent.leafCount++;
-                        }
-                        // Store parent position for stalk animation
-                        node.parentPos = {
-                            x: parent.x,
-                            y: parent.y,
-                            z: parent.z,
-                        };
-                    }
-
-                    if (targetPos) {
-                        node.targetX = targetPos.x;
-                        node.targetY = targetPos.y;
-                        node.targetZ = targetPos.z;
-                    }
-
-                    const nodeColor = nodeColors[type];
-                    const nodeMaterial = new THREE.MeshPhongMaterial({ color: nodeColor });
-
-                    let nodeMesh;
-                    if (type === "leaf") {
-                        nodeMesh = new THREE.Mesh(leafGeometry, nodeMaterial);
-                        nodeMesh.scale.set(0, 0, 0);
-                        node.targetScale = 1;
-                        nodeMesh.rotation.x = Math.random() * Math.PI;
-                        nodeMesh.rotation.y = Math.random() * Math.PI;
-                        nodeMesh.rotation.z = Math.random() * Math.PI;
-                    } else {
-                        nodeMesh = new THREE.Mesh(nodeGeometry, nodeMaterial);
-                    }
-
-                    nodeMesh.position.set(x, y, z);
-                    nodeObjects.add(nodeMesh);
-                    node.mesh = nodeMesh;
-
-                    if (parent && type !== "leaf") {
-                        if (type === "stalk" && isStalkLoaded && stalkGeometry) {
-                            // Create a new mesh using the geometry and material
-                            const stalkMesh = new THREE.Mesh(stalkGeometry, stalkMaterial);
-
-                            // Initialize with zero scale
-                            const transform = calculateStalkTransform(
-                                node.parentPos, // Use stored parent position
-                                { x, y, z }, // Current position
-                                0, // Start with zero growth
-                            );
-
-                            stalkMesh.position.copy(transform.position);
-                            stalkMesh.quaternion.copy(transform.rotation);
-                            stalkMesh.scale.copy(transform.scale);
-
-                            nodeObjects.add(stalkMesh);
-                            node.connectionMesh = stalkMesh;
-                            node.connectionLine = null;
-                        } else {
-                            // Fallback to line if model isn't loaded or for non-stalk types
-                            const connectionGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(parent.x, parent.y, parent.z), new THREE.Vector3(x, y, z)]);
-                            const connectionMaterial = new THREE.LineBasicMaterial({ color: nodeColor });
-                            const connectionLine = new THREE.Line(connectionGeometry, connectionMaterial);
-                            connectionObjects.add(connectionLine);
-
-                            node.connectionLine = connectionLine;
-                            node.connectionMesh = null;
-                        }
-                    }
-
-                    return node;
-                }
 
                 function calculateStalkTransform(parent, current, growthProgress = 1) {
                     // Calculate direction vector from parent to current
@@ -470,6 +388,55 @@
                     };
                 }
 
+                function calculateLeafTransform(current, growthProgress = 1) {
+                    const position = new THREE.Vector3(current.x, current.y, current.z);
+                    const quaternion = new THREE.Quaternion();
+
+                    // Since the model is along X axis, we start with a vector pointing along X
+                    const modelDirection = new THREE.Vector3(1, 0, 0);
+
+                    // Get the horizontal component of the growth direction
+                    const horizontalDirection = new THREE.Vector3(
+                        current.directionVector.x,
+                        // 0, // Zero out the Y component to keep leaves level
+                        Math.random() * 0.5 - 0.25, // Add slight random variation to Y,
+                        current.directionVector.z,
+                    ).normalize();
+
+                    // If horizontal direction is zero (perfectly vertical growth), use a default direction
+                    if (horizontalDirection.lengthSq() < 0.001) {
+                        horizontalDirection.set(1, 0, 0);
+                    }
+
+                    // Calculate rotation to align with horizontal direction
+                    quaternion.setFromUnitVectors(modelDirection, horizontalDirection);
+
+                    // Add alternating rotation based on leaf count
+                    // Rotate around the world Y axis for left/right alternation
+                    const upVector = new THREE.Vector3(0, 1, 0);
+                    const alternatingRotation = new THREE.Quaternion();
+
+                    // Base rotation angle (90 degrees left or right)
+                    let rotation = current.parent.leafCount % 2 === 0 ? Math.PI : 2 * Math.PI;
+
+                    // Add some random variation (-0.2 to 0.2 radians, about ±11.5 degrees)
+                    rotation += (Math.random() - 0.5) * 0.4;
+
+                    alternatingRotation.setFromAxisAngle(upVector, rotation);
+
+                    // Apply both rotations
+                    quaternion.multiply(alternatingRotation);
+
+                    // Apply scale
+                    const scale = new THREE.Vector3(growthProgress, growthProgress, growthProgress);
+
+                    return {
+                        position: position,
+                        rotation: quaternion,
+                        scale: scale,
+                    };
+                }
+
                 function calculateTargetPosition(parentNode, type) {
                     let targetX, targetY, targetZ;
 
@@ -479,18 +446,23 @@
                     const emitterDist = Math.sqrt(emitterDirX * emitterDirX + emitterDirZ * emitterDirZ);
                     const emitterAngle = Math.atan2(emitterDirZ, emitterDirX);
 
-                    if (type === "leaf") {
-                        const randomAngle = Math.random() * Math.PI * 2;
-                        const blendedAngle = randomAngle * (1 - emitterInfluence) + emitterAngle * emitterInfluence;
-                        const radius = 0.2;
-
-                        targetX = parentNode.x + Math.cos(blendedAngle) * radius;
-                        targetY = parentNode.y + (Math.random() * 0.2 - 0.1);
-                        targetZ = parentNode.z + Math.sin(blendedAngle) * radius;
-                        return { x: targetX, y: targetY, z: targetZ };
-                    }
-
                     switch (type) {
+                        case "leaf": {
+                            // Use the parent's direction vector to determine leaf position
+                            const growthDistance = 0.5; // Distance from parent to leaf tip
+
+                            // Calculate target position along the growth direction
+                            targetX = parentNode.x + parentNode.directionVector.x * growthDistance;
+                            targetY = parentNode.y + parentNode.directionVector.y * growthDistance;
+                            targetZ = parentNode.z + parentNode.directionVector.z * growthDistance;
+
+                            // Add slight random variation
+                            const variance = 0.1;
+                            targetX += (Math.random() - 0.5) * variance;
+                            targetY += (Math.random() - 0.5) * variance;
+                            targetZ += (Math.random() - 0.5) * variance;
+                            break;
+                        }
                         case "root": {
                             const randomAngle = Math.random() * 2 * Math.PI;
                             const varianceScale = 1 - emitterInfluence;
@@ -856,11 +828,10 @@
                         if (type === "leaf") {
                             parent.leafCount++;
                         }
-                        node.parentPos = {
-                            x: parent.x,
-                            y: parent.y,
-                            z: parent.z,
-                        };
+
+                        // Store parent position and calculate direction vector
+                        node.parentPos = new THREE.Vector3(parent.x, parent.y, parent.z);
+                        node.directionVector = new THREE.Vector3(targetPos.x - parent.x, targetPos.y - parent.y, targetPos.z - parent.z).normalize();
                     }
 
                     if (targetPos) {
@@ -873,13 +844,16 @@
                     const nodeMaterial = new THREE.MeshPhongMaterial({ color: nodeColor });
 
                     let nodeMesh;
-                    if (type === "leaf") {
-                        nodeMesh = new THREE.Mesh(leafGeometry, nodeMaterial);
-                        nodeMesh.scale.set(0, 0, 0);
+                    if (type === "leaf" && isLeafLoaded && leafGeometry) {
+                        let leafMaterial = new THREE.MeshPhongMaterial({ color: 0x2e8b57, side: THREE.DoubleSide });
+                        nodeMesh = new THREE.Mesh(leafGeometry, leafMaterial);
+                        nodeMesh.scale.set(0, 0, 0); // Start with zero scale
                         node.targetScale = 1;
-                        nodeMesh.rotation.x = Math.random() * Math.PI;
-                        nodeMesh.rotation.y = Math.random() * Math.PI;
-                        nodeMesh.rotation.z = Math.random() * Math.PI;
+
+                        // Apply initial transform
+                        const transform = calculateLeafTransform(node, 0);
+                        nodeMesh.position.copy(transform.position);
+                        nodeMesh.quaternion.copy(transform.rotation);
                     } else {
                         nodeMesh = new THREE.Mesh(nodeGeometry, nodeMaterial);
                     }
@@ -952,7 +926,6 @@
                         }
 
                         if (currentNode.type === "leaf") {
-                            // Handle leaf scaling animation
                             const scaleAmount = (currentNode.moveSpeed * deltaTime) / (1000 / ANIM_SPEED);
                             const currentScale = currentNode.mesh.scale.x;
                             const remainingScale = currentNode.targetScale - currentScale;
