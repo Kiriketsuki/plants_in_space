@@ -33,6 +33,7 @@
             this.modelScale = { y: 0 };
             this.parentPos = null;
             this.directionVector = new THREE.Vector3();
+            this.currentBranchAngle = null;
         }
 
         calculateDepth() {
@@ -100,16 +101,12 @@
                 const renderer = new THREE.WebGLRenderer({ canvas: canvas.value });
                 renderer.setSize(window.innerWidth, window.innerHeight);
 
-                const controls = new OrbitControls(camera, renderer.domElement);
-                controls.enableDamping = true;
+                // const controls = new OrbitControls(camera, renderer.domElement);
+                // controls.enableDamping = true;
 
                 const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
                 directionalLight.position.set(5, 5, 5);
                 scene.add(directionalLight);
-
-                // For debugging the model's position and orientation
-                const axesHelper = new THREE.AxesHelper(5);
-                scene.add(axesHelper);
 
                 const sceneLight = new THREE.AmbientLight(0xffffff, 0.5);
                 scene.add(sceneLight);
@@ -173,6 +170,44 @@
                         duration: 1,
                         ease: "power2.inOut",
                     });
+                }
+
+                function animateCameraForBranch(parentNode) {
+                    // Only adjust camera for branches directly from stalks
+                    if (parentNode.type === "stalk") {
+                        const branchIndex = parentNode.children.length - 1; // Get index of newest branch
+                        const anglePerBranch = 360 / MAX_STALK_BRANCHES;
+                        const heightRotation = parentNode.height * 30;
+                        const startAngle = heightRotation * (Math.PI / 180);
+                        const baseAngle = branchIndex * anglePerBranch * (Math.PI / 180) + startAngle;
+
+                        // Calculate target camera position
+                        const targetX = Math.cos(baseAngle) * currentRadius;
+                        const targetZ = Math.sin(baseAngle) * currentRadius;
+
+                        // Animate camera position
+                        gsap.to(camera.position, {
+                            x: targetX,
+                            z: targetZ,
+                            duration: MS_PER_QUARTER_BEAT / 250,
+                            ease: "power2.inOut",
+                        });
+
+                        // Animate music emitter
+                        gsap.to(
+                            { value: musicEmitterAngle },
+                            {
+                                value: baseAngle,
+                                duration: MS_PER_QUARTER_BEAT / 250,
+                                ease: "power2.inOut",
+                                onUpdate: function () {
+                                    musicEmitterAngle = this.targets()[0].value;
+                                    musicEmitter.position.x = Math.cos(musicEmitterAngle) * musicEmitterRadius;
+                                    musicEmitter.position.z = Math.sin(musicEmitterAngle) * musicEmitterRadius;
+                                },
+                            },
+                        );
+                    }
                 }
 
                 // Create music emitter
@@ -815,6 +850,7 @@
                 nodeFolder.add(nodeInfo, "type").listen();
 
                 let currentIndex = 0;
+                let plantGrowthTime = 120000;
                 let elapsedTime = 0;
                 let lastStalkHeight = 0;
                 let currentNode = null;
@@ -894,104 +930,214 @@
                     return node;
                 }
 
-                function animatePlant(deltaTime) {
+                // Add these constants at the same level as your other constants
+                // Add these near your other GUI setup code
+                const growthControls = {
+                    bpm: 100,
+                    lastBpm: 100,
+                };
+
+                // Add a new folder to your GUI
+                const growthFolder = gui.addFolder("Growth Controls");
+                growthFolder
+                    .add(growthControls, "bpm", 60, 200, 1)
+                    .name("BPM")
+                    .onChange((value) => {
+                        // Only update if BPM has actually changed
+                        if (value !== growthControls.lastBpm) {
+                            // Update timing constants
+                            const newBpm = value;
+                            const newMsPerBeat = MS_PER_MINUTE / newBpm;
+                            const newMsPerQuarterBeat = newMsPerBeat / 4;
+
+                            // Update the next growth time based on the new timing
+                            const currentTime = performance.now();
+                            const timeSinceLastBeat = currentTime - currentGrowthStartTime;
+                            const progressInCurrentBeat = timeSinceLastBeat / (MS_PER_MINUTE / growthControls.lastBpm / 4);
+
+                            // Adjust next growth time based on new BPM
+                            const remainingTime = (1 - progressInCurrentBeat) * newMsPerQuarterBeat;
+                            nextGrowthTime = currentTime + remainingTime;
+
+                            // Update the timing constants
+                            MS_PER_BEAT = newMsPerBeat;
+                            MS_PER_QUARTER_BEAT = newMsPerQuarterBeat;
+
+                            // Store the new BPM
+                            growthControls.lastBpm = value;
+                        }
+                    });
+
+                const MS_PER_MINUTE = 60000;
+                let MS_PER_BEAT = MS_PER_MINUTE / growthControls.bpm;
+                let MS_PER_QUARTER_BEAT = MS_PER_BEAT / 4;
+
+                // Add these values to your GUI folder for monitoring (optional)
+                growthFolder.add({ beatInterval: MS_PER_BEAT }, "beatInterval").name("MS Per Beat").listen().disable();
+                growthFolder.add({ quarterBeatInterval: MS_PER_QUARTER_BEAT }, "quarterBeatInterval").name("MS Per Quarter").listen().disable();
+
+                // Optional: Add visual indicators
+                const indicators = {
+                    showBeatMarker: true,
+                    beatMarkerSize: 0.1,
+                    beatMarkerColor: "#ff0000",
+                };
+
+                growthFolder.add(indicators, "showBeatMarker").name("Show Beat Marker");
+                growthFolder.addColor(indicators, "beatMarkerColor").name("Beat Color");
+
+                // Add a beat marker sphere (optional visual indicator)
+                const beatMarkerGeometry = new THREE.SphereGeometry(indicators.beatMarkerSize);
+                const beatMarkerMaterial = new THREE.MeshBasicMaterial({
+                    color: indicators.beatMarkerColor,
+                    transparent: true,
+                    opacity: 0.5,
+                });
+                const beatMarker = new THREE.Mesh(beatMarkerGeometry, beatMarkerMaterial);
+                beatMarker.position.set(0, 5, 0); // Position it above the plant
+                scene.add(beatMarker);
+
+                // Add these variables to track timing
+                let startTime = null;
+                let nextGrowthTime = 0;
+                let currentGrowthStartTime = 0;
+
+                function animate(currentTime) {
+                    requestAnimationFrame(animate);
+                    // controls.update();
+                    // updateCameraPosition(currentTime / 10000);
+
+                    // Initialize start time
+                    if (startTime === null) {
+                        startTime = currentTime;
+                        nextGrowthTime = currentTime;
+                        currentGrowthStartTime = currentTime;
+                    }
+
+                    const deltaTime = currentTime - elapsedTime;
+                    elapsedTime = currentTime;
+
+                    // Update music emitter
+                    musicEmitterAngle += musicEmitterSpeed * deltaTime;
+                    musicEmitter.position.x = Math.cos(musicEmitterAngle) * musicEmitterRadius;
+                    musicEmitter.position.z = Math.sin(musicEmitterAngle) * musicEmitterRadius;
+
+                    // Update beat marker
+                    if (indicators.showBeatMarker) {
+                        const beatProgress = ((currentTime - currentGrowthStartTime) % MS_PER_QUARTER_BEAT) / MS_PER_QUARTER_BEAT;
+                        beatMarker.material.opacity = 0.5 * (1 - beatProgress);
+                        beatMarker.scale.setScalar(1 + beatProgress * 0.5);
+                        beatMarker.material.color.set(indicators.beatMarkerColor);
+                        beatMarker.visible = true;
+                    } else {
+                        beatMarker.visible = false;
+                    }
+
+                    // Only proceed if models are loaded
+                    if (currentTime > 1000 && isStalkLoaded && isBranchLoaded && currentTime < plantGrowthTime + 1000) {
+                        animatePlantWithBPM(currentTime);
+                    }
+
+                    camera.lookAt(cameraTarget);
+                    renderer.render(scene, camera);
+                }
+
+                function animatePlantWithBPM(currentTime) {
                     const maxIndex = Math.max(...Object.keys(growthConfig).map(Number));
 
-                    if (currentIndex <= maxIndex) {
-                        if (!currentNode) {
-                            const type = determineNodeType(currentIndex);
+                    // Check if it's time for the next growth
+                    if (currentTime >= nextGrowthTime && !currentNode && currentIndex <= maxIndex) {
+                        const type = determineNodeType(currentIndex);
 
-                            if (type === null) {
+                        if (type === null) {
+                            currentIndex++;
+                            nextGrowthTime = currentTime + MS_PER_QUARTER_BEAT;
+                            return;
+                        }
+
+                        // Create new node
+                        if (currentIndex === 0) {
+                            currentNode = addNode(0, 0, 0, type, null, { x: 0, y: 0, z: 0 });
+                        } else {
+                            const parent = findParentNode(type);
+                            if (!parent) {
                                 currentIndex++;
+                                nextGrowthTime = currentTime + MS_PER_QUARTER_BEAT;
                                 return;
                             }
+                            const targetPos = calculateTargetPosition(parent, type);
+                            currentNode = addNode(parent.x, parent.y, parent.z, type, parent, targetPos);
 
-                            if (currentIndex === 0) {
-                                currentNode = addNode(0, 0, 0, type, null, { x: 0, y: 0, z: 0 });
-                            } else {
-                                const parent = findParentNode(type);
-                                if (!parent) {
-                                    currentIndex++;
-                                    return;
-                                }
-                                const targetPos = calculateTargetPosition(parent, type, camera);
-                                currentNode = addNode(parent.x, parent.y, parent.z, type, parent, targetPos);
-
-                                if (type === "stalk") {
-                                    if (currentNode.height > lastStalkHeight) {
-                                        lastStalkHeight = currentNode.height;
-                                    }
-                                }
+                            if (type === "stalk" && currentNode.height > lastStalkHeight) {
+                                lastStalkHeight = currentNode.height;
+                                animateCameraForStalk();
+                            } else if (type === "branch" && parent.type === "stalk") {
+                                animateCameraForBranch(parent);
                             }
                         }
 
+                        // Set the start time for this growth animation
+                        currentGrowthStartTime = currentTime;
+                        nextGrowthTime = currentTime + MS_PER_QUARTER_BEAT;
+                    }
+
+                    // If we have a current node, animate it
+                    if (currentNode) {
+                        // Calculate progress for this growth animation
+                        const growthProgress = Math.min(1, (currentTime - currentGrowthStartTime) / MS_PER_QUARTER_BEAT);
+
                         if (currentNode.type === "leaf") {
-                            const scaleAmount = (currentNode.moveSpeed * deltaTime) / (1000 / ANIM_SPEED);
-                            const currentScale = currentNode.mesh.scale.x;
-                            const remainingScale = currentNode.targetScale - currentScale;
-
-                            if (remainingScale > scaleAmount) {
-                                const newScale = currentScale + scaleAmount;
-                                currentNode.mesh.scale.set(newScale, newScale, newScale);
-                            } else {
-                                currentNode.mesh.scale.set(currentNode.targetScale, currentNode.targetScale, currentNode.targetScale);
-                                currentIndex++;
-                                currentNode = null;
-                            }
+                            // Animate leaf scaling
+                            const newScale = currentNode.targetScale * growthProgress;
+                            currentNode.mesh.scale.set(newScale, newScale, newScale);
                         } else {
-                            const moveAmount = (currentNode.moveSpeed * deltaTime) / (1000 / ANIM_SPEED);
-                            const remainingDistanceY = Math.abs(currentNode.targetY - currentNode.y);
-                            const remainingDistanceX = Math.abs(currentNode.targetX - currentNode.x);
-                            const remainingDistanceZ = Math.abs(currentNode.targetZ - currentNode.z);
+                            // Animate node movement
+                            const startX = currentNode.parent ? currentNode.parent.x : currentNode.x;
+                            const startY = currentNode.parent ? currentNode.parent.y : currentNode.y;
+                            const startZ = currentNode.parent ? currentNode.parent.z : currentNode.z;
 
-                            let growthProgress = 0;
-                            if (currentNode.parentPos) {
-                                const totalDistance = Math.sqrt(Math.pow(currentNode.targetX - currentNode.parentPos.x, 2) + Math.pow(currentNode.targetY - currentNode.parentPos.y, 2) + Math.pow(currentNode.targetZ - currentNode.parentPos.z, 2));
+                            currentNode.x = startX + (currentNode.targetX - startX) * growthProgress;
+                            currentNode.y = startY + (currentNode.targetY - startY) * growthProgress;
+                            currentNode.z = startZ + (currentNode.targetZ - startZ) * growthProgress;
 
-                                const currentDistance = Math.sqrt(Math.pow(currentNode.x - currentNode.parentPos.x, 2) + Math.pow(currentNode.y - currentNode.parentPos.y, 2) + Math.pow(currentNode.z - currentNode.parentPos.z, 2));
+                            // Update mesh position
+                            currentNode.mesh.position.set(currentNode.x, currentNode.y, currentNode.z);
 
-                                growthProgress = currentDistance / totalDistance;
+                            // Update connection visualization
+                            if (currentNode.connectionMesh && currentNode.parentPos) {
+                                const currentPos = {
+                                    x: currentNode.x,
+                                    y: currentNode.y,
+                                    z: currentNode.z,
+                                };
+
+                                const transform = currentNode.type === "branch" ? calculateBranchTransform(currentNode.parentPos, currentPos, growthProgress) : calculateStalkTransform(currentNode.parentPos, currentPos, growthProgress);
+
+                                currentNode.connectionMesh.position.copy(transform.position);
+                                currentNode.connectionMesh.quaternion.copy(transform.rotation);
+                                currentNode.connectionMesh.scale.copy(transform.scale);
+                            } else if (currentNode.connectionLine) {
+                                const positions = currentNode.connectionLine.geometry.attributes.position.array;
+                                positions[3] = currentNode.x;
+                                positions[4] = currentNode.y;
+                                positions[5] = currentNode.z;
+                                currentNode.connectionLine.geometry.attributes.position.needsUpdate = true;
                             }
+                        }
 
-                            if (remainingDistanceY > moveAmount || remainingDistanceX > moveAmount || remainingDistanceZ > moveAmount) {
-                                // Update position
-                                if (remainingDistanceY > moveAmount) {
-                                    const directionY = currentNode.targetY > currentNode.y ? 1 : -1;
-                                    currentNode.y += moveAmount * directionY;
-                                }
-                                if (remainingDistanceX > moveAmount) {
-                                    const directionX = currentNode.targetX > currentNode.x ? 1 : -1;
-                                    currentNode.x += moveAmount * directionX;
-                                }
-                                if (remainingDistanceZ > moveAmount) {
-                                    const directionZ = currentNode.targetZ > currentNode.z ? 1 : -1;
-                                    currentNode.z += moveAmount * directionZ;
-                                }
+                        // Update GUI
+                        nodePosition.x = currentNode.x;
+                        nodePosition.y = currentNode.y;
+                        nodePosition.z = currentNode.z;
+                        nodeInfo.depth = currentNode.depth;
+                        nodeInfo.type = currentNode.type;
 
-                                currentNode.mesh.position.set(currentNode.x, currentNode.y, currentNode.z);
-
-                                // Update connection visualization
-                                if (currentNode.connectionMesh && currentNode.parentPos) {
-                                    const currentPos = {
-                                        x: currentNode.x,
-                                        y: currentNode.y,
-                                        z: currentNode.z,
-                                    };
-
-                                    const transform = currentNode.type === "branch" ? calculateBranchTransform(currentNode.parentPos, currentPos, growthProgress) : calculateStalkTransform(currentNode.parentPos, currentPos, growthProgress);
-
-                                    currentNode.connectionMesh.position.copy(transform.position);
-                                    currentNode.connectionMesh.quaternion.copy(transform.rotation);
-                                    currentNode.connectionMesh.scale.copy(transform.scale);
-                                } else if (currentNode.connectionLine) {
-                                    const positions = currentNode.connectionLine.geometry.attributes.position.array;
-                                    positions[3] = currentNode.x;
-                                    positions[4] = currentNode.y;
-                                    positions[5] = currentNode.z;
-                                    currentNode.connectionLine.geometry.attributes.position.needsUpdate = true;
-                                }
+                        // If growth is complete, prepare for next node
+                        if (growthProgress >= 1) {
+                            // Ensure final position is set
+                            if (currentNode.type === "leaf") {
+                                currentNode.mesh.scale.set(currentNode.targetScale, currentNode.targetScale, currentNode.targetScale);
                             } else {
-                                // Final position reached
                                 currentNode.x = currentNode.targetX;
                                 currentNode.y = currentNode.targetY;
                                 currentNode.z = currentNode.targetZ;
@@ -1003,47 +1149,12 @@
                                     currentNode.connectionMesh.position.copy(finalTransform.position);
                                     currentNode.connectionMesh.quaternion.copy(finalTransform.rotation);
                                     currentNode.connectionMesh.scale.copy(finalTransform.scale);
-                                } else if (currentNode.connectionLine) {
-                                    const positions = currentNode.connectionLine.geometry.attributes.position.array;
-                                    positions[3] = currentNode.x;
-                                    positions[4] = currentNode.y;
-                                    positions[5] = currentNode.z;
-                                    currentNode.connectionLine.geometry.attributes.position.needsUpdate = true;
                                 }
-
-                                currentIndex++;
-                                currentNode = null;
                             }
+
+                            currentNode = null;
+                            currentIndex++;
                         }
-
-                        if (currentNode) {
-                            nodePosition.x = currentNode.x;
-                            nodePosition.y = currentNode.y;
-                            nodePosition.z = currentNode.z;
-                            nodeInfo.depth = currentNode.depth;
-                            nodeInfo.type = currentNode.type;
-                        }
-                    }
-                }
-
-                function animate(time) {
-                    requestAnimationFrame(animate);
-                    controls.update();
-                    // updateCameraPosition(time / 25000);
-
-                    const deltaTime = time - elapsedTime;
-                    elapsedTime = time;
-
-                    // Smoothly update music emitter position
-                    musicEmitterAngle += musicEmitterSpeed * deltaTime;
-                    musicEmitter.position.x = Math.cos(musicEmitterAngle) * musicEmitterRadius;
-                    musicEmitter.position.z = Math.sin(musicEmitterAngle) * musicEmitterRadius;
-
-                    camera.lookAt(cameraTarget);
-                    renderer.render(scene, camera);
-
-                    if (time > 1000 && isStalkLoaded && isBranchLoaded) {
-                        animatePlant(deltaTime);
                     }
                 }
 
