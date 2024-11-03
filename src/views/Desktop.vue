@@ -415,6 +415,11 @@
         { name: "G7", freq: 3135.96 },
     ];
 
+    const leafNoteMat = new THREE.MeshLambertMaterial({ color: 0x2e8b57, side: THREE.DoubleSide });
+    const branchNoteMat = new THREE.MeshLambertMaterial({ color: 0x228b22 });
+    const stalkNoteMat = new THREE.MeshLambertMaterial({ color: 0x8b4513 });
+    const rootNoteMat = new THREE.MeshLambertMaterial({ color: 0x4b2b15 });
+
     // Computed properties
     const allFilesLoaded = computed(() => {
         return selectedSongs.value.every((song) => songFiles.value.has(song.id));
@@ -865,36 +870,116 @@
                 return closestNote;
             }
 
+            const getNoteHue = (noteName, materialType) => {
+                const noteMap = {
+                    "F#": 0,
+                    G: 1,
+                    "G#": 2,
+                    A: 3,
+                    "A#": 4,
+                    B: 5,
+                    C: 6,
+                    "C#": 7,
+                    D: 8,
+                    "D#": 9,
+                    E: 10,
+                    F: 11,
+                };
+
+                const noteIndex = noteMap[noteName];
+
+                // Calculate base hue (0-360)
+                let hue;
+                switch (materialType) {
+                    case "leaf":
+                        // Map 0-11 to 270-360 and 0-70
+                        hue =
+                            noteIndex <= 5
+                                ? 270 + noteIndex * (90 / 6) // 270-360 for first half
+                                : (noteIndex - 6) * (70 / 6); // 0-70 for second half
+                        break;
+
+                    case "branch":
+                        // Map 0-11 to 12-94
+                        hue = 12 + noteIndex * (82 / 12);
+                        break;
+
+                    case "stalk":
+                        // Map 0-11 to 10-50
+                        hue = 10 + noteIndex * (40 / 12);
+                        break;
+
+                    case "root":
+                        // Map 0-11 to 0-360
+                        hue = noteIndex * (360 / 12);
+                        break;
+
+                    default:
+                        hue = 0;
+                }
+
+                return hue;
+            };
+
             function analyzeAudio() {
                 if (!isPlaying.value) return;
 
                 analyzer.getByteFrequencyData(dataArray);
 
-                // Find significant frequencies
-                const significantFreqs = findSignificantFrequencies(dataArray);
+                // Find significant frequencies with energy levels
+                const frequencyResolution = audioContext.value.sampleRate / analyzer.fftSize;
+                const significantFreqs = [];
 
-                // Convert frequencies to notes
+                for (let i = 0; i < dataArray.length; i++) {
+                    if (dataArray[i] > 200) {
+                        // Threshold
+                        significantFreqs.push({
+                            frequency: i * frequencyResolution,
+                            energy: dataArray[i],
+                        });
+                    }
+                }
+
+                // Convert frequencies to notes with energy
                 const detected = significantFreqs
-                    .map((freq) => findNearestNote(freq))
+                    .map(({ frequency, energy }) => {
+                        const note = findNearestNote(frequency);
+                        return {
+                            name: note.name,
+                            noteName: note.name.slice(0, -1),
+                            octave: parseInt(note.name.slice(-1)),
+                            frequency: `${frequency.toFixed(2)} Hz`,
+                            energy: energy, // Add energy to the note data
+                        };
+                    })
                     .filter((note, index, self) => index === self.findIndex((n) => n.name === note.name))
-                    .sort((a, b) => a.freq - b.freq)
-                    .map((note) => ({
-                        name: note.name,
-                        noteName: note.name.slice(0, -1),
-                        octave: parseInt(note.name.slice(-1)),
-                        frequency: `${note.freq.toFixed(2)} Hz`,
-                    }));
+                    // Sort by energy (highest first)
+                    .sort((a, b) => b.energy - a.energy);
 
                 // Update the reactive ref
                 detectedNotes.value = detected;
 
-                // Still keep the console log if desired
-                // if (Date.now() % 500 < 50 && detected.length > 0) {
-                //     console.log("Detected Notes:", {
-                //         notes: detected,
-                //         timestamp: new Date().toISOString(),
-                //     });
-                // }
+                // Update materials if we have detected notes
+                if (detected.length > 0) {
+                    const dominantNote = detected[0];
+                    const normalizedEnergy = (dominantNote.energy / 255) * 50 + 50; // Map to 50-100 range
+
+                    // Update each material
+                    const materials = [
+                        { mat: leafNoteMat, type: "leaf", lightness: 50 },
+                        { mat: branchNoteMat, type: "branch", lightness: 50 },
+                        { mat: stalkNoteMat, type: "stalk", lightness: 25 },
+                        { mat: rootNoteMat, type: "root", lightness: 25 },
+                    ];
+
+                    materials.forEach(({ mat, type, lightness }) => {
+                        const hue = getNoteHue(dominantNote.noteName, type);
+                        const color = new THREE.Color();
+                        color.setHSL(hue / 360, normalizedEnergy / 100, lightness / 100);
+                        mat.color = color;
+                        mat.needsUpdate = true;
+                    });
+                }
 
                 requestAnimationFrame(analyzeAudio);
             }
@@ -1926,7 +2011,7 @@
 
             let nodeMesh;
             if (type === "leaf" && isLeafLoaded && leafGeometry) {
-                let leafMaterial = new THREE.MeshLambertMaterial({ color: 0x2e8b57, side: THREE.DoubleSide });
+                let leafMaterial = leafNoteMat.clone();
                 nodeMesh = new THREE.Mesh(leafGeometry, leafMaterial);
                 nodeMesh.scale.set(0, 0, 0); // Start with zero scale
                 node.targetScale = 1;
@@ -1945,6 +2030,7 @@
 
             if (parent && type !== "leaf") {
                 if (type === "stalk" && isStalkLoaded && stalkGeometry) {
+                    let stalkMaterial = stalkNoteMat.clone();
                     const stalkMesh = new THREE.Mesh(stalkGeometry, stalkMaterial);
                     const transform = calculateStalkTransform(node.parentPos, { x, y, z }, 0);
                     stalkMesh.position.copy(transform.position);
@@ -1954,6 +2040,7 @@
                     node.connectionMesh = stalkMesh;
                     node.connectionLine = null;
                 } else if (type === "branch" && isBranchLoaded && branchGeometry) {
+                    let branchMaterial = branchNoteMat.clone();
                     const branchMesh = new THREE.Mesh(branchGeometry, branchMaterial);
                     const transform = calculateBranchTransform(node.parentPos, { x, y, z }, 0);
                     branchMesh.position.copy(transform.position);
@@ -1964,8 +2051,8 @@
                     node.connectionLine = null;
                 } else {
                     const connectionGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(parent.x, parent.y, parent.z), new THREE.Vector3(x, y, z)]);
-                    const connectionMaterial = new THREE.LineBasicMaterial({ color: nodeColor });
-                    const connectionLine = new THREE.Line(connectionGeometry, connectionMaterial);
+                    let rootMaterial = rootNoteMat.clone();
+                    const connectionLine = new THREE.Line(connectionGeometry, rootMaterial);
                     connectionObjects.add(connectionLine);
                     node.connectionLine = connectionLine;
                     node.connectionMesh = null;
@@ -2138,9 +2225,11 @@
 
     window.addEventListener("resize", onWindowResize, false);
     function onWindowResize() {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
+        if (camera && renderer) {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
     }
 </script>
 
