@@ -177,6 +177,7 @@
     import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
     import GUI from "lil-gui";
     import gsap from "gsap";
+    import { update } from "three/examples/jsm/libs/tween.module.js";
 
     class Node {
         constructor(x, y, z, type, parent = null) {
@@ -1136,19 +1137,6 @@
             }
         }
 
-        // Create music emitter
-        const musicEmitterGeometry = new THREE.SphereGeometry(0.1, 12, 12);
-        const musicEmitterMaterial = new THREE.MeshPhongMaterial({
-            color: 0xff0000,
-            emissive: 0xff0000,
-            emissiveIntensity: 0.5,
-        });
-        const musicEmitter = new THREE.Mesh(musicEmitterGeometry, musicEmitterMaterial);
-        scene.add(musicEmitter);
-
-        // Start the music emitter animation
-        musicEmitter.position.set(musicEmitterRadius, 0, 0);
-
         // const leafGeometry = new THREE.CircleGeometry(0.15, 32);
         const nodeGeometry = new THREE.SphereGeometry(0.025);
 
@@ -1264,6 +1252,133 @@
                 console.error("Error loading leaf model:", error);
             },
         );
+
+        // Create music emitter
+        const musicEmitter = new THREE.Group();
+
+        // Create outer sphere
+        const outerSphereGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+        const outerSphereMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.1,
+            wireframe: true,
+        });
+        const outerSphere = new THREE.Mesh(outerSphereGeometry, outerSphereMaterial);
+
+        // Create inner sphere
+        const innerSphereGeometry = new THREE.SphereGeometry(0.1, 32, 32);
+        const innerSphereMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.3,
+            wireframe: true,
+        });
+        const innerSphere = new THREE.Mesh(innerSphereGeometry, innerSphereMaterial);
+
+        // Add both spheres to group
+        musicEmitter.add(outerSphere);
+        musicEmitter.add(innerSphere);
+        scene.add(musicEmitter);
+
+        // Start the music emitter animation
+        musicEmitter.position.set(musicEmitterRadius, 0, 0);
+
+        let noteGeometry = null;
+        loader.load(
+            "../assets/note.glb",
+            (gltf) => {
+                gltf.scene.traverse((child) => {
+                    if (child.isMesh && !noteGeometry) {
+                        noteGeometry = child.geometry.clone();
+                        noteGeometry.scale(1, 1, 1);
+                    }
+                });
+            },
+            undefined,
+            (error) => {
+                console.error("Error loading note model:", error);
+            },
+        );
+
+        const notesGroup = new THREE.Group();
+        scene.add(notesGroup);
+
+        const activeNotes = [];
+        let lastPulseScale = 0;
+
+        function updateInnerSpherePulse(currentTime) {
+            const beatDuration = MS_PER_MINUTE / currBPM.value;
+            const pulseProgress = ((currentTime - animationStartTime) % beatDuration) / beatDuration;
+
+            // Sine wave for smooth pulsing
+            const pulseScale = Math.sin(pulseProgress * Math.PI) * 1.0;
+            innerSphere.scale.setScalar(pulseScale);
+
+            // Check if we just hit peak scale (approximately 1.0)
+            if (pulseScale > 0.99 && lastPulseScale <= 0.99) {
+                emitNote();
+            }
+            lastPulseScale = pulseScale;
+        }
+
+        function emitNote() {
+            if (!noteGeometry) return;
+
+            // Create note mesh
+            const noteMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 1,
+            });
+            const noteMesh = new THREE.Mesh(noteGeometry, noteMaterial);
+
+            // Set initial position to music emitter position
+            noteMesh.position.copy(musicEmitter.position);
+
+            // Set random rotation
+            noteMesh.rotation.set(Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2);
+
+            // Add to scene
+            notesGroup.add(noteMesh);
+
+            // Create animation data
+            const noteData = {
+                mesh: noteMesh,
+                startTime: Date.now(),
+                duration: 1000, // 1 second animation
+                startPosition: noteMesh.position.clone(),
+                startOpacity: 1,
+            };
+            activeNotes.push(noteData);
+        }
+
+        function updateNotes() {
+            const currentTime = Date.now();
+            for (let i = activeNotes.length - 1; i >= 0; i--) {
+                const note = activeNotes[i];
+                const elapsed = currentTime - note.startTime;
+                const progress = Math.min(elapsed / note.duration, 1);
+
+                // Move towards center
+                note.mesh.position.lerp(new THREE.Vector3(currentNode.x, currentNode.y, currentNode.z), progress);
+
+                // Fade out
+                note.mesh.material.opacity = note.startOpacity * (1 - progress);
+
+                // Scale down slightly
+                const scale = 1 - progress * 0.5;
+                note.mesh.scale.setScalar(scale);
+
+                // Remove if animation complete
+                if (progress >= 1) {
+                    notesGroup.remove(note.mesh);
+                    note.mesh.geometry.dispose();
+                    note.mesh.material.dispose();
+                    activeNotes.splice(i, 1);
+                }
+            }
+        }
 
         function calculateStalkTransform(parent, current, growthProgress = 1) {
             // Calculate direction vector from parent to current
@@ -1822,6 +1937,8 @@
             // Only proceed if models are loaded
             if (isPlaying.value && isStalkLoaded && isBranchLoaded) {
                 animatePlantWithBPM(audioTime);
+                updateInnerSpherePulse(audioTime);
+                updateNotes();
             }
 
             camera.lookAt(cameraTarget);
