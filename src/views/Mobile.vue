@@ -808,6 +808,8 @@
         growthTime.value = "120";
         songDistributions.value = {};
         isDistributionValid.value = false;
+        leftVolume.value = 50;
+        rightVolume.value = 50;
     }
 
     watch(musicVolume, (newVolume) => {

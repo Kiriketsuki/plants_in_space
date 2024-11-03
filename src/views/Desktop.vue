@@ -924,25 +924,89 @@
         if (!isPlaying.value) {
             return;
         }
-        console.log("Stopping playback");
+        console.log("Transitioning to ambient mode");
         isPlaying.value = false;
-        audioStatus.value = "Stopped";
+        audioStatus.value = "Ambient";
 
-        if (currentAudio.value) {
-            try {
-                currentAudio.value.source.stop();
-                currentAudio.value = null;
-            } catch (err) {
-                console.error("Error stopping audio:", err);
-            }
-        }
-
+        // Clear the playback interval since we don't need to track growth time anymore
         if (playbackInterval.value) {
             clearInterval(playbackInterval.value);
             playbackInterval.value = null;
         }
 
-        currentSong.value = 0;
+        // If there's current audio playing, adjust its volume
+        if (currentAudio.value) {
+            try {
+                // Store the original volume settings
+                const originalLeftGain = leftGainNode.value.gain.value;
+                const originalRightGain = rightGainNode.value.gain.value;
+
+                // Create volume objects for GSAP to animate
+                const leftVolume = { gain: originalLeftGain };
+                const rightVolume = { gain: originalRightGain };
+
+                // Use GSAP to animate the volume reduction
+                gsap.to(leftVolume, {
+                    gain: originalLeftGain * 0.01,
+                    duration: 5,
+                    ease: "power1.out",
+                    onUpdate: () => {
+                        leftGainNode.value.gain.value = leftVolume.gain;
+                    },
+                });
+
+                gsap.to(rightVolume, {
+                    gain: originalRightGain * 0.01,
+                    duration: 5,
+                    ease: "power1.out",
+                    onUpdate: () => {
+                        rightGainNode.value.gain.value = rightVolume.gain;
+                    },
+                });
+
+                gsap.to(musicEmitter.scale, {
+                    x: 0,
+                    y: 0,
+                    z: 0,
+                    duration: 5,
+                    ease: "power1.out",
+                });
+
+                // Enable looping if not already set
+                currentAudio.value.source.loop = true;
+            } catch (err) {
+                console.error("Error adjusting audio:", err);
+            }
+        } else {
+            // If no audio is playing, start the last track at ambient volume
+            currentSong.value = selectedSongs.value.length - 1;
+            const song = selectedSongs.value[currentSong.value];
+            const fileData = songFiles.value.get(song.id);
+
+            if (fileData?.audioBuffer) {
+                try {
+                    currentAudio.value = await playAudioBuffer(fileData.audioBuffer);
+
+                    // Set initial volume and animate down
+                    const initialVolume = { gain: leftGainNode.value.gain.value };
+
+                    gsap.to(initialVolume, {
+                        gain: initialVolume.gain * 0.01,
+                        duration: 5,
+                        ease: "power1.out",
+                        onUpdate: () => {
+                            leftGainNode.value.gain.value = initialVolume.gain;
+                            rightGainNode.value.gain.value = initialVolume.gain;
+                        },
+                    });
+
+                    // Enable looping
+                    currentAudio.value.source.loop = true;
+                } catch (err) {
+                    console.error("Error starting ambient audio:", err);
+                }
+            }
+        }
     }
 
     function updateChannelVolumes() {
@@ -953,7 +1017,7 @@
             leftGainNode.value.gain.value = leftGain;
             rightGainNode.value.gain.value = rightGain;
 
-            updateMusicEmitterSpeed();
+            updateMusicEmitterPosition;
         }
     }
 
@@ -992,32 +1056,36 @@
 
     // Music emitter animation properties
     const musicEmitterRadius = 5;
-    let musicEmitterSpeed = 0;
-    let musicEmitterBaseSpeed = 0.002525;
     let musicEmitterAngle = 0;
     let emitterInfluence = 0.5;
+    let musicEmitter = null;
+    let currentBranchAngle = 0;
 
-    function updateMusicEmitterSpeed() {
-        // Use leftVolume and rightVolume computed values
-        const volumeDifference = rightVolume.value - leftVolume.value; // Range: -100 to 100
-        const normalizedDifference = volumeDifference / 100; // Range: -1 to 1
-        const absDifference = Math.abs(normalizedDifference);
-        const direction = normalizedDifference > 0 ? -1 : 1;
+    function updateMusicEmitterPosition() {
+        if (!musicEmitter) return;
 
-        // Define speed zones based on volume difference
-        if (absDifference <= 0.05) {
-            // No volume difference
-            musicEmitterSpeed = 0;
-        } else if (absDifference <= 0.25) {
-            // Slight volume difference
-            musicEmitterSpeed = 0.5 * direction * musicEmitterBaseSpeed;
-        } else if (absDifference <= 0.5) {
-            // Moderate volume difference
-            musicEmitterSpeed = 0.75 * direction * musicEmitterBaseSpeed;
+        // Convert 0-100 position to radians relative to current branch angle
+        // Flip the normalization for correct left/right orientation
+        const normalizedPosition = (50 - musicDirection.value) / 50; // Convert to -1 to 1 range, flipped
+
+        if (Math.abs(normalizedPosition) <= 0.1) {
+            emitterInfluence = 0;
         } else {
-            // Large volume difference
-            musicEmitterSpeed = 1 * direction * musicEmitterBaseSpeed;
+            // Scale influence from 0 to 1 between 0.1 and 1.0
+            // Using (x - 0.1) / 0.9 to normalize the range 0.1 to 1.0 into 0 to 1
+            emitterInfluence = (Math.abs(normalizedPosition) - 0.1) / 0.9;
+            // Optional: Add easing for smoother transition
+            emitterInfluence = Math.pow(emitterInfluence, 2); // Square for more gradual initial increase
         }
+
+        // Calculate final angle by adding offset to current branch angle
+        // Use ±90 degrees (±π/2) as the maximum deviation from branch angle
+        const offsetAngle = normalizedPosition * (Math.PI / 2);
+        musicEmitterAngle = currentBranchAngle + offsetAngle;
+
+        // Update emitter position
+        musicEmitter.position.x = Math.cos(musicEmitterAngle) * musicEmitterRadius;
+        musicEmitter.position.z = Math.sin(musicEmitterAngle) * musicEmitterRadius;
     }
 
     const initThreeJs = () => {
@@ -1131,9 +1199,8 @@
                     ease: "power2.inOut",
                 });
 
-                musicEmitterAngle = baseAngle;
-                musicEmitter.position.x = Math.cos(musicEmitterAngle) * musicEmitterRadius;
-                musicEmitter.position.z = Math.sin(musicEmitterAngle) * musicEmitterRadius;
+                currentBranchAngle = baseAngle;
+                updateMusicEmitterPosition();
             }
         }
 
@@ -1187,15 +1254,13 @@
         let isLeafLoaded = false;
 
         // Create a simple material for the stalk
-        const stalkMaterial = new THREE.MeshPhongMaterial({
+        const stalkMaterial = new THREE.MeshLambertMaterial({
             color: 0x8b4513, // Brown color
-            shininess: 30,
             emissive: 0x222222,
         });
 
-        const branchMaterial = new THREE.MeshPhongMaterial({
+        const branchMaterial = new THREE.MeshLambertMaterial({
             color: 0x228b22, // Green color
-            shininess: 30,
             emissive: 0x1a661a,
         });
 
@@ -1254,7 +1319,7 @@
         );
 
         // Create music emitter
-        const musicEmitter = new THREE.Group();
+        musicEmitter = new THREE.Group();
 
         // Create outer sphere
         const outerSphereGeometry = new THREE.SphereGeometry(0.1, 8, 8);
@@ -1361,7 +1426,7 @@
                 const progress = Math.min(elapsed / note.duration, 1);
 
                 // Move towards center
-                note.mesh.position.lerp(new THREE.Vector3(currentNode.x, currentNode.y, currentNode.z), progress);
+                note.mesh.position.lerp(cameraTarget, progress);
 
                 // Fade out
                 note.mesh.material.opacity = note.startOpacity * (1 - progress);
@@ -1478,7 +1543,6 @@
             // Get emitter influence direction for all types
             const emitterDirX = musicEmitter.position.x - parentNode.x;
             const emitterDirZ = musicEmitter.position.z - parentNode.z;
-            const emitterDist = Math.sqrt(emitterDirX * emitterDirX + emitterDirZ * emitterDirZ);
             const emitterAngle = Math.atan2(emitterDirZ, emitterDirX);
 
             switch (type) {
@@ -1541,15 +1605,12 @@
                         const startAngle = heightRotation * (Math.PI / 180);
                         const baseAngle = branchIndex * anglePerBranch * (Math.PI / 180) + startAngle;
 
-                        // Blend the regular branch angle with emitter influence
-                        const blendedAngle = baseAngle * (1 - emitterInfluence) + emitterAngle * emitterInfluence;
-
                         const baseRadius = 1.0;
                         const heightScale = 0.95;
                         const radius = Math.pow(heightScale, parentNode.height) * baseRadius;
 
-                        targetX = parentNode.x + radius * Math.cos(blendedAngle);
-                        targetZ = parentNode.z + radius * Math.sin(blendedAngle);
+                        targetX = parentNode.x + radius * Math.cos(baseAngle);
+                        targetZ = parentNode.z + radius * Math.sin(baseAngle);
                         targetY = parentNode.y + (Math.random() * 2 - 1) * 0.125;
                     } else {
                         const stalkParent = findStalkParent(parentNode);
@@ -1861,11 +1922,11 @@
             }
 
             const nodeColor = nodeColors[type];
-            const nodeMaterial = new THREE.MeshPhongMaterial({ color: nodeColor });
+            const nodeMaterial = new THREE.MeshLambertMaterial({ color: nodeColor });
 
             let nodeMesh;
             if (type === "leaf" && isLeafLoaded && leafGeometry) {
-                let leafMaterial = new THREE.MeshPhongMaterial({ color: 0x2e8b57, side: THREE.DoubleSide });
+                let leafMaterial = new THREE.MeshLambertMaterial({ color: 0x2e8b57, side: THREE.DoubleSide });
                 nodeMesh = new THREE.Mesh(leafGeometry, leafMaterial);
                 nodeMesh.scale.set(0, 0, 0); // Start with zero scale
                 node.targetScale = 1;
@@ -1930,14 +1991,14 @@
             elapsedTime = audioTime;
 
             // Update music emitter
-            musicEmitterAngle += musicEmitterSpeed * (currentTime - lastTime);
-            musicEmitter.position.x = Math.cos(musicEmitterAngle) * musicEmitterRadius;
-            musicEmitter.position.z = Math.sin(musicEmitterAngle) * musicEmitterRadius;
+            updateMusicEmitterPosition();
 
             // Only proceed if models are loaded
             if (isPlaying.value && isStalkLoaded && isBranchLoaded) {
                 animatePlantWithBPM(audioTime);
                 updateInnerSpherePulse(audioTime);
+                updateNotes();
+            } else if (activeNotes.length > 0) {
                 updateNotes();
             }
 
