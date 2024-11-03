@@ -952,7 +952,7 @@
             leftGainNode.value.gain.value = leftGain;
             rightGainNode.value.gain.value = rightGain;
 
-            // console.log("Updated channel volumes:", { leftGain, rightGain });
+            updateMusicEmitterSpeed();
         }
     }
 
@@ -986,6 +986,36 @@
         if (rightGainNode.value) {
             rightGainNode.value.disconnect();
             rightGainNode.value = null;
+        }
+    }
+
+    // Music emitter animation properties
+    const musicEmitterRadius = 5;
+    let musicEmitterSpeed = 0;
+    let musicEmitterBaseSpeed = 0.002525;
+    let musicEmitterAngle = 0;
+    let emitterInfluence = 0.5;
+
+    function updateMusicEmitterSpeed() {
+        // Use leftVolume and rightVolume computed values
+        const volumeDifference = rightVolume.value - leftVolume.value; // Range: -100 to 100
+        const normalizedDifference = volumeDifference / 100; // Range: -1 to 1
+        const absDifference = Math.abs(normalizedDifference);
+        const direction = normalizedDifference > 0 ? -1 : 1;
+
+        // Define speed zones based on volume difference
+        if (absDifference <= 0.05) {
+            // No volume difference
+            musicEmitterSpeed = 0;
+        } else if (absDifference <= 0.25) {
+            // Slight volume difference
+            musicEmitterSpeed = 0.5 * direction * musicEmitterBaseSpeed;
+        } else if (absDifference <= 0.5) {
+            // Moderate volume difference
+            musicEmitterSpeed = 0.75 * direction * musicEmitterBaseSpeed;
+        } else {
+            // Large volume difference
+            musicEmitterSpeed = 1 * direction * musicEmitterBaseSpeed;
         }
     }
 
@@ -1116,44 +1146,6 @@
         const musicEmitter = new THREE.Mesh(musicEmitterGeometry, musicEmitterMaterial);
         scene.add(musicEmitter);
 
-        // Music emitter animation properties
-        const musicEmitterRadius = currentRadius - 1;
-        let musicEmitterSpeed = 0;
-        let musicEmitterBaseSpeed = 0.00125;
-        let musicEmitterAngle = 0;
-
-        // Mouse position tracking
-        let mouseX = 0;
-
-        function updateMusicEmitterSpeed(x) {
-            const windowWidth = window.innerWidth;
-            const centerX = windowWidth / 2;
-            const normalizedX = (x - centerX) / centerX; // Range: -1 to 1
-            const absX = Math.abs(normalizedX);
-            const direction = normalizedX < 0 ? 1 : -1;
-
-            // Define speed zones
-            if (absX <= 0.1) {
-                // Center 10% - no movement
-                musicEmitterSpeed = 0;
-            } else if (absX <= 0.25) {
-                // 10-25% - speed 0.75
-                musicEmitterSpeed = 0.5 * direction * musicEmitterBaseSpeed;
-            } else if (absX <= 0.5) {
-                // 25-50% - speed 1.5
-                musicEmitterSpeed = 0.75 * direction * musicEmitterBaseSpeed;
-            } else {
-                // 50-100% - speed 3
-                musicEmitterSpeed = 1 * direction * musicEmitterBaseSpeed;
-            }
-        }
-        
-        // Add mouse move event listener
-        window.addEventListener("mousemove", (event) => {
-            mouseX = event.clientX;
-            updateMusicEmitterSpeed(mouseX);
-        });
-
         // Start the music emitter animation
         musicEmitter.position.set(musicEmitterRadius, 0, 0);
 
@@ -1182,12 +1174,11 @@
         scene.add(connectionObjects);
 
         const MAX_ROOT_DEPTH = 5;
-        const MAX_BRANCH_LENGTH = 4;
+        const MAX_BRANCH_LENGTH = 5;
         const MAX_CHILDREN = 2;
-        const MAX_STALK_BRANCHES = 4;
+        const MAX_STALK_BRANCHES = 3;
         const X_VARIANCE = 1;
         const Z_VARIANCE = 1;
-        const emitterInfluence = 0.00001;
 
         const growthConfig = {
             25: "root",
