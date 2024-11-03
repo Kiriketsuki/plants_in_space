@@ -309,6 +309,8 @@
     let lastStalkHeight = 0;
     let currentNode = null;
 
+    let isCompleted = false;
+
     const mobileUrl = `${window.location.origin}/mobile/${props.id}`;
 
     // Analysis
@@ -1011,6 +1013,7 @@
         }
         console.log("Transitioning to ambient mode");
         isPlaying.value = false;
+        isCompleted = true;
         audioStatus.value = "Ambient";
 
         // Clear the playback interval since we don't need to track growth time anymore
@@ -1095,14 +1098,14 @@
     }
 
     function updateChannelVolumes() {
-        if (leftGainNode.value && rightGainNode.value) {
+        if (leftGainNode.value && rightGainNode.value && isPlaying.value) {
             const leftGain = (leftVolume.value / 100) * (musicVolume.value / 100) * 2;
             const rightGain = (rightVolume.value / 100) * (musicVolume.value / 100) * 2;
 
             leftGainNode.value.gain.value = leftGain;
             rightGainNode.value.gain.value = rightGain;
 
-            updateMusicEmitterPosition;
+            updateMusicEmitterPosition();
         }
     }
 
@@ -1184,8 +1187,8 @@
         renderer = new THREE.WebGLRenderer({ canvas: canvas.value });
         renderer.setSize(window.innerWidth, window.innerHeight);
 
-        // const controls = new OrbitControls(camera, renderer.domElement);
-        // controls.enableDamping = true;
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
 
         const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
         directionalLight.position.set(5, 5, 5);
@@ -2089,7 +2092,11 @@
                 updateNotes();
             }
 
-            camera.lookAt(cameraTarget);
+            if (!isCompleted) {
+                camera.lookAt(cameraTarget);
+            } else {
+                controls.update();
+            }
             renderer.render(scene, camera);
             lastTime = currentTime;
         };

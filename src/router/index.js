@@ -7,6 +7,12 @@ const Desktop = () => import("../views/Desktop.vue");
 const Mobile = () => import("../views/Mobile.vue");
 const SpotifyRedirect = () => import("../views/SpotifyRedirect.vue");
 
+// Function to generate random alphanumeric ID
+const generateRandomId = (length = 8) => {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    return Array.from({ length }, () => chars.charAt(Math.floor(Math.random() * chars.length))).join("");
+};
+
 const routes = [
     {
         path: "/",
@@ -22,6 +28,15 @@ const routes = [
         component: Audio,
         meta: {
             title: "Audio",
+        },
+    },
+    {
+        // Add a route for /desktop without ID
+        path: "/desktop",
+        name: "desktop-redirect",
+        beforeEnter: (to, from, next) => {
+            const randomId = generateRandomId();
+            next({ name: "desktop", params: { id: randomId } });
         },
     },
     {
