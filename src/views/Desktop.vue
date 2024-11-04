@@ -37,7 +37,8 @@
                     <img
                         :src="`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(mobileUrl)}`"
                         alt="QR Code"
-                        class="w-48 h-48" />
+                        class="w-48 h-48"
+                        @click="openInNewTab" />
                     <p class="mt-4 text-sm text-gray-600">Scan to connect</p>
                 </div>
             </div>
@@ -167,6 +168,12 @@
             class="w-full h-full">
         </canvas>
     </div>
+
+    <div
+        v-if="isCompleted"
+        class="absolute top-[10vh] left-[10vh] z-10 bg-white p-3">
+        <button @click="onDownloadClick">Download Plant</button>
+    </div>
 </template>
 
 <script setup>
@@ -175,9 +182,9 @@
     import * as THREE from "three";
     import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
     import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
+    import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter";
     import GUI from "lil-gui";
     import gsap from "gsap";
-    import { update } from "three/examples/jsm/libs/tween.module.js";
 
     class Node {
         constructor(x, y, z, type, parent = null) {
@@ -290,6 +297,7 @@
 
     // Three.js refs
     const canvas = ref(null);
+    let controls = null;
     let scene = null;
     let camera = null;
     let renderer = null;
@@ -304,7 +312,6 @@
     let currentGrowthStartTime = null;
     let animationStartTime = null;
     let currentIndex = 0;
-    let plantGrowthTime = 120000;
     let elapsedTime = 0;
     let lastStalkHeight = 0;
     let currentNode = null;
@@ -312,6 +319,10 @@
     let isCompleted = false;
 
     const mobileUrl = `${window.location.origin}/mobile/${props.id}`;
+
+    function openInNewTab() {
+        window.open(mobileUrl, "_blank");
+    }
 
     // Analysis
     const detectedNotes = ref([]);
@@ -417,10 +428,10 @@
         { name: "G7", freq: 3135.96 },
     ];
 
-    const leafNoteMat = new THREE.MeshLambertMaterial({ color: 0x2e8b57, side: THREE.DoubleSide });
-    const branchNoteMat = new THREE.MeshLambertMaterial({ color: 0x228b22 });
-    const stalkNoteMat = new THREE.MeshLambertMaterial({ color: 0x8b4513 });
-    const rootNoteMat = new THREE.MeshLambertMaterial({ color: 0x4b2b15 });
+    const leafNoteMat = new THREE.MeshStandardMaterial({ color: 0x2e8b57, side: THREE.DoubleSide });
+    const branchNoteMat = new THREE.MeshStandardMaterial({ color: 0x228b22 });
+    const stalkNoteMat = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
+    const rootNoteMat = new THREE.MeshStandardMaterial({ color: 0x4b2b15 });
 
     // Computed properties
     const allFilesLoaded = computed(() => {
@@ -829,34 +840,6 @@
             // Connect merger to destination
             merger.connect(audioContext.value.destination);
 
-            function findSignificantFrequencies(spectrum) {
-                const AMPLITUDE_THRESHOLD = 200; // Adjusted threshold
-                let frequencies = [];
-                let bandStart = -1;
-                let bandEnd = -1;
-
-                for (let i = 0; i < spectrum.length; i++) {
-                    if (spectrum[i] > AMPLITUDE_THRESHOLD) {
-                        if (bandStart === -1) bandStart = i;
-                        bandEnd = i;
-                    } else if (bandEnd !== -1) {
-                        let centerBin = (bandStart + bandEnd) / 2;
-                        let frequency = (centerBin * audioContext.value.sampleRate) / analyzer.fftSize;
-                        frequencies.push(frequency);
-                        bandStart = -1;
-                        bandEnd = -1;
-                    }
-                }
-
-                if (bandStart !== -1 && bandEnd !== -1) {
-                    let centerBin = (bandStart + bandEnd) / 2;
-                    let frequency = (centerBin * audioContext.value.sampleRate) / analyzer.fftSize;
-                    frequencies.push(frequency);
-                }
-
-                return frequencies;
-            }
-
             function findNearestNote(frequency) {
                 let closestNote = notes[0];
                 let minDiff = Math.abs(frequency - closestNote.freq);
@@ -894,11 +877,8 @@
                 let hue;
                 switch (materialType) {
                     case "leaf":
-                        // Map 0-11 to 270-360 and 0-70
-                        hue =
-                            noteIndex <= 5
-                                ? 270 + noteIndex * (90 / 6) // 270-360 for first half
-                                : (noteIndex - 6) * (70 / 6); // 0-70 for second half
+                        // Map 0-11 to 0-160
+                        hue = noteIndex * (160 / 11);
                         break;
 
                     case "branch":
@@ -964,14 +944,14 @@
                 // Update materials if we have detected notes
                 if (detected.length > 0) {
                     const dominantNote = detected[0];
-                    const normalizedEnergy = (dominantNote.energy / 255) * 50 + 50; // Map to 50-100 range
+                    const normalizedEnergy = ((dominantNote.energy - 200) / 55) * 50 + 50; // Map 200-255 to 50-100 range
 
                     // Update each material
                     const materials = [
                         { mat: leafNoteMat, type: "leaf", lightness: 50 },
                         { mat: branchNoteMat, type: "branch", lightness: 50 },
-                        { mat: stalkNoteMat, type: "stalk", lightness: 25 },
-                        { mat: rootNoteMat, type: "root", lightness: 25 },
+                        { mat: stalkNoteMat, type: "stalk", lightness: 10 },
+                        { mat: rootNoteMat, type: "root", lightness: 10 },
                     ];
 
                     materials.forEach(({ mat, type, lightness }) => {
@@ -1189,6 +1169,7 @@
 
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
+        controls.enablePan = false;
 
         const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
         directionalLight.position.set(5, 5, 5);
@@ -1205,23 +1186,14 @@
         scene.add(gridHelper);
 
         // camera setup
-
         const cameraTarget = new THREE.Vector3(0, 0, 0);
         let currentRadius = 8; // Start with 15 units radius
-        let rotationSpeed = 0.2; // Full rotations per second
 
         // Set initial camera position
         camera.position.x = currentRadius;
         camera.position.z = 0;
         camera.position.y = 3.5;
         camera.lookAt(cameraTarget);
-
-        function updateCameraPosition(time) {
-            const angle = time * rotationSpeed * Math.PI * 2;
-            camera.position.x = Math.cos(angle) * currentRadius;
-            camera.position.z = Math.sin(angle) * currentRadius;
-            camera.lookAt(new THREE.Vector3(0, camera.position.y, 0));
-        }
 
         function animateCameraForStalk() {
             const nextRadius = currentRadius + 0.5;
@@ -1317,7 +1289,7 @@
         scene.add(connectionObjects);
 
         const MAX_ROOT_DEPTH = 5;
-        const MAX_BRANCH_LENGTH = 5;
+        const MAX_BRANCH_LENGTH = 4;
         const MAX_CHILDREN = 2;
         const MAX_STALK_BRANCHES = 3;
         const X_VARIANCE = 1;
@@ -1340,17 +1312,6 @@
         let isStalkLoaded = false;
         let isBranchLoaded = false;
         let isLeafLoaded = false;
-
-        // Create a simple material for the stalk
-        const stalkMaterial = new THREE.MeshLambertMaterial({
-            color: 0x8b4513, // Brown color
-            emissive: 0x222222,
-        });
-
-        const branchMaterial = new THREE.MeshLambertMaterial({
-            color: 0x228b22, // Green color
-            emissive: 0x1a661a,
-        });
 
         loader.load(
             "../assets/stalk.glb",
@@ -2010,7 +1971,7 @@
             }
 
             const nodeColor = nodeColors[type];
-            const nodeMaterial = new THREE.MeshLambertMaterial({ color: nodeColor });
+            const nodeMaterial = new THREE.MeshStandardMaterial({ color: nodeColor });
 
             let nodeMesh;
             if (type === "leaf" && isLeafLoaded && leafGeometry) {
@@ -2095,6 +2056,9 @@
             if (!isCompleted) {
                 camera.lookAt(cameraTarget);
             } else {
+                if (!controls.enablePan) {
+                    controls.enablePan = true;
+                }
                 controls.update();
             }
             renderer.render(scene, camera);
@@ -2213,6 +2177,137 @@
         }
         animate(0);
     };
+
+    function saveArrayBuffer(buffer, filename) {
+        const blob = new Blob([buffer], { type: "application/octet-stream" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename || "scene.glb";
+        link.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function ensureTRSCompatible(object) {
+        object.traverse((node) => {
+            if (node.isObject3D) {
+                // Decompose the current matrix
+                const position = new THREE.Vector3();
+                const quaternion = new THREE.Quaternion();
+                const scale = new THREE.Vector3();
+
+                // Get the world matrix
+                const matrix = node.matrix.clone();
+
+                // Try to decompose
+                if (!matrix.decompose(position, quaternion, scale)) {
+                    // If decomposition fails, reset to identity transformation
+                    node.position.set(0, 0, 0);
+                    node.quaternion.identity();
+                    node.scale.set(1, 1, 1);
+                } else {
+                    // Apply decomposed transformation
+                    node.position.copy(position);
+                    node.quaternion.copy(quaternion);
+                    node.scale.copy(scale);
+                }
+
+                // Ensure matrix is not directly set
+                node.matrixAutoUpdate = true;
+                node.updateMatrix();
+            }
+        });
+    }
+
+    function optimizeMaterials(scene) {
+        const materialMap = new Map();
+
+        scene.traverse((node) => {
+            if (node.isMesh && node.material) {
+                // Create a key based on material properties
+                const key = JSON.stringify({
+                    color: node.material.color ? node.material.color.getHex() : null,
+                    type: node.material.type,
+                    transparent: node.material.transparent,
+                    opacity: node.material.opacity,
+                });
+
+                if (!materialMap.has(key)) {
+                    materialMap.set(key, node.material.clone());
+                }
+
+                // Reuse existing material
+                node.material = materialMap.get(key);
+            }
+        });
+    }
+
+    function downloadPlant() {
+        if (!scene) {
+            console.error("Scene not initialized");
+            return;
+        }
+
+        // Create a copy of the scene to export
+        const exportScene = scene.clone(true);
+
+        // Remove any UI elements or helpers
+        exportScene.traverse((object) => {
+            if (object.userData.isUI || object.isHelper || (object.type === "Line" && object.userData.isHelper)) {
+                object.removeFromParent();
+            }
+        });
+
+        // Ensure all transformations are TRS-compatible
+        ensureTRSCompatible(exportScene);
+
+        // Optimize materials
+        optimizeMaterials(exportScene);
+
+        // Configure export options
+        const options = {
+            binary: true,
+            maxTextureSize: 4096,
+            animations: [],
+            includeCustomExtensions: false,
+            onlyVisible: true,
+            trs: true, // Force TRS mode
+        };
+
+        // Create exporter
+        const exporter = new GLTFExporter();
+
+        // Export the scene
+        exporter.parse(
+            exportScene,
+            (result) => {
+                saveArrayBuffer(result, props.id + ".glb");
+
+                // Clean up
+                exportScene.traverse((object) => {
+                    if (object.geometry) {
+                        object.geometry.dispose();
+                    }
+                    if (object.material) {
+                        object.material.dispose();
+                    }
+                });
+            },
+            (error) => {
+                console.error("An error occurred while exporting:", error);
+            },
+            options,
+        );
+    }
+
+    // Make downloadPlant available to the template
+    function onDownloadClick() {
+        if (!scene) {
+            console.error("Scene not initialized");
+            return;
+        }
+        downloadPlant();
+    }
 
     // Lifecycle hooks
     onMounted(() => {
