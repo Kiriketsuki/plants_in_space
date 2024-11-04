@@ -1,5 +1,5 @@
 <template>
-    <div class="h-screen w-screen absolute top-0 left-0 overflow-x-hidden bg-gray-900 p-4 main z-10">
+    <div class="h-screen w-screen absolute top-0 left-0 overflow-x-hidden overflow-y-hidden bg-gray-900 p-4 main z-10">
         <!-- Connection Status -->
         <div class="absolute top-4 right-4 z-50">
             <div class="p-3 bg-gray-800 rounded text-sm text-white space-y-1">
@@ -186,6 +186,11 @@
     import GUI from "lil-gui";
     import gsap from "gsap";
 
+    import { ref as storageRef, uploadBytes, getStorage } from "firebase/storage";
+    import { initializeApp } from "firebase/app";
+    import { firebaseConfig } from "../../secrets";
+    import { getFirestore, collection, doc, setDoc, getDoc, runTransaction } from "firebase/firestore";
+
     class Node {
         constructor(x, y, z, type, parent = null) {
             this.x = x;
@@ -317,6 +322,10 @@
     let currentNode = null;
 
     let isCompleted = false;
+
+    // Firebase
+    const isUploading = ref(false);
+    const uploadStatus = ref("");
 
     const mobileUrl = `${window.location.origin}/mobile/${props.id}`;
 
@@ -537,6 +546,7 @@
                                 numberOfChannels: audioBuffer.numberOfChannels,
                                 sampleRate: audioBuffer.sampleRate,
                             });
+                            Math.random.seed = songId;
                         } catch (decodeErr) {
                             console.error("Error decoding audio data:", decodeErr);
                             error.value = `Error decoding audio: ${decodeErr.message}`;
@@ -1008,14 +1018,18 @@
                 // Store the original volume settings
                 const originalLeftGain = leftGainNode.value.gain.value;
                 const originalRightGain = rightGainNode.value.gain.value;
+                const maxGain = Math.max(originalLeftGain, originalRightGain);
+
+                leftGainNode.value.gain.value = maxGain;
+                rightGainNode.value.gain.value = maxGain;
 
                 // Create volume objects for GSAP to animate
-                const leftVolume = { gain: originalLeftGain };
-                const rightVolume = { gain: originalRightGain };
+                const leftVolume = { gain: maxGain };
+                const rightVolume = { gain: maxGain };
 
                 // Use GSAP to animate the volume reduction
                 gsap.to(leftVolume, {
-                    gain: originalLeftGain * 0.01,
+                    gain: maxGain * 0.01,
                     duration: 5,
                     ease: "power1.out",
                     onUpdate: () => {
@@ -1024,7 +1038,7 @@
                 });
 
                 gsap.to(rightVolume, {
-                    gain: originalRightGain * 0.01,
+                    gain: maxGain * 0.01,
                     duration: 5,
                     ease: "power1.out",
                     onUpdate: () => {
@@ -2300,13 +2314,156 @@
         );
     }
 
-    // Make downloadPlant available to the template
-    function onDownloadClick() {
+    const app = initializeApp(firebaseConfig);
+    const storage = getStorage(app);
+    const db = getFirestore(app);
+
+    // Function to get and increment counter
+    async function getNextId() {
+        const counterRef = doc(db, "counters", "plants");
+
+        try {
+            const newId = await runTransaction(db, async (transaction) => {
+                const counterDoc = await transaction.get(counterRef);
+
+                if (!counterDoc.exists()) {
+                    // Initialize counter if it doesn't exist
+                    transaction.set(counterRef, { value: 1 });
+                    return 0;
+                }
+
+                const newValue = counterDoc.data().value;
+                transaction.update(counterRef, { value: newValue + 1 });
+                return newValue;
+            });
+
+            return newId;
+        } catch (error) {
+            console.error("Error getting next ID:", error);
+            throw error;
+        }
+    }
+
+    // Function to upload file and store reference
+    async function uploadPlantToCloud(buffer, filename) {
+        try {
+            // 1. Get next ID
+            const plantId = await getNextId();
+
+            // 2. Upload file to storage
+            const fileRef = storageRef(storage, `plants/${filename}`);
+            const blob = new Blob([buffer], { type: "application/octet-stream" });
+            const snapshot = await uploadBytes(fileRef, blob);
+
+            // 3. Store reference in Firestore
+            const plantRef = doc(db, "plants", plantId.toString());
+            await setDoc(plantRef, {
+                id: plantId,
+                storageLink: snapshot.ref.fullPath,
+                createdAt: new Date().toISOString(),
+            });
+
+            return {
+                success: true,
+                id: plantId,
+                url: snapshot.ref.fullPath,
+                message: "Plant uploaded and stored successfully",
+            };
+        } catch (error) {
+            console.error("Error in upload process:", error);
+            return {
+                success: false,
+                error: error.message,
+            };
+        }
+    }
+
+    // Modified save function
+    async function savePlantToCloud(scene, fileName) {
         if (!scene) {
             console.error("Scene not initialized");
             return;
         }
-        downloadPlant();
+
+        const exportScene = scene.clone(true);
+
+        // Remove UI elements and helpers
+        exportScene.traverse((object) => {
+            if (object.userData.isUI || object.isHelper || (object.type === "Line" && object.userData.isHelper)) {
+                object.removeFromParent();
+            }
+        });
+
+        ensureTRSCompatible(exportScene);
+        optimizeMaterials(exportScene);
+
+        const options = {
+            binary: true,
+            maxTextureSize: 4096,
+            animations: [],
+            includeCustomExtensions: false,
+            onlyVisible: true,
+            trs: true,
+        };
+
+        const exporter = new GLTFExporter();
+
+        return new Promise((resolve, reject) => {
+            exporter.parse(
+                exportScene,
+                async (result) => {
+                    try {
+                        const uploadResult = await uploadPlantToCloud(result, fileName);
+
+                        // Clean up
+                        exportScene.traverse((object) => {
+                            if (object.geometry) {
+                                object.geometry.dispose();
+                            }
+                            if (object.material) {
+                                object.material.dispose();
+                            }
+                        });
+
+                        resolve(uploadResult);
+                    } catch (error) {
+                        reject(error);
+                    }
+                },
+                (error) => {
+                    reject(error);
+                },
+                options,
+            );
+        });
+    }
+
+    async function onDownloadClick() {
+        if (!scene) {
+            console.error("Scene not initialized");
+            return;
+        }
+
+        try {
+            isUploading.value = true;
+            uploadStatus.value = "Uploading...";
+
+            const fileName = `${props.id}.glb`;
+            const result = await savePlantToCloud(scene, fileName);
+
+            if (result.success) {
+                uploadStatus.value = `Upload successful! Plant ID: ${result.id}`;
+                console.log("File uploaded successfully:", result);
+            } else {
+                uploadStatus.value = "Upload failed";
+                console.error("Upload failed:", result.error);
+            }
+        } catch (error) {
+            console.error("Error saving plant:", error);
+            uploadStatus.value = "Error saving plant";
+        } finally {
+            isUploading.value = false;
+        }
     }
 
     // Lifecycle hooks
