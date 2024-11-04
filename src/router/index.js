@@ -12,6 +12,7 @@ const Desktop = () => import("../views/Desktop.vue");
 const Mobile = () => import("../views/Mobile.vue");
 const Display = () => import("../views/Display.vue");
 const DisplayLatest = () => import("../views/DisplayLatest.vue");
+const Visual = () => import("../views/Visual.vue");
 
 // Function to get existing IDs from storage
 async function getExistingIds() {
@@ -95,6 +96,14 @@ const routes = [
         path: "/latest",
         name: "latest",
         component: DisplayLatest,
+    },
+    {
+        path: "/visual",
+        name: "visual",
+        component: Visual,
+        meta: {
+            title: "Visual",
+        },
     },
     {
         path: "/:catchAll(.*)",

@@ -401,9 +401,7 @@
     }
 
     function reconnect() {
-        error.value = "";
-        resetState();
-        socket = initializeSocket();
+        window.location.reload();
     }
 
     // File Functions

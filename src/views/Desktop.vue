@@ -138,7 +138,7 @@
         </div>
     </div>
 
-    <div class="h-screen w-screen bg-blue-900 absolute top-0 left-0 z-0">
+    <div class="h-screen w-screen bg-gray-900 absolute top-0 left-0 z-0">
         <canvas
             ref="canvas"
             class="w-full h-full">
@@ -1150,7 +1150,7 @@
     }
 
     // Music emitter animation properties
-    const musicEmitterRadius = 5;
+    const musicEmitterRadius = 7.5;
     let musicEmitterAngle = 0;
     let emitterInfluence = 0.5;
     let musicEmitter = null;
@@ -1184,11 +1184,6 @@
     }
 
     const initThreeJs = () => {
-        let gui = new GUI();
-        const growthFolder = gui.addFolder("Growth Controls");
-        growthFolder.add({ bpm: currBPM.value }, "bpm").name("Current BPM").listen().disable();
-        growthFolder.add({ currentSong: 0 }, "currentSong").name("Current Song").listen().disable();
-
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         renderer = new THREE.WebGLRenderer({ canvas: canvas.value, antialias: true, alpha: true });
@@ -1206,12 +1201,134 @@
         const sceneLight = new THREE.AmbientLight(0xffffff, 0.5);
         scene.add(sceneLight);
 
-        // grid representing the water
+        // Enable shadow mapping in the renderer
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-        const gridHelper = new THREE.GridHelper(10, 10);
-        const gridHelperMaterial = new THREE.LineBasicMaterial({ color: 0x0000ff, opacity: 0.2, transparent: true });
-        gridHelper.material = gridHelperMaterial;
-        scene.add(gridHelper);
+        // Configure directional light for shadows
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 2048;
+        directionalLight.shadow.mapSize.height = 2048;
+        directionalLight.shadow.camera.near = 0.1;
+        directionalLight.shadow.camera.far = 100;
+        directionalLight.shadow.camera.left = -15;
+        directionalLight.shadow.camera.right = 15;
+        directionalLight.shadow.camera.top = 15;
+        directionalLight.shadow.camera.bottom = -15;
+        directionalLight.shadow.bias = -0.001;
+        directionalLight.position.set(10, 15, 10);
+
+        // Create the water surface
+        const waterGeometry = new THREE.PlaneGeometry(20, 20, 100, 100);
+        const waterMaterial = new THREE.MeshStandardMaterial({
+            color: new THREE.Color("#2288ff"),
+            transparent: true,
+            opacity: 0.6,
+            roughness: 0.4,
+            metalness: 0.1,
+            side: THREE.DoubleSide,
+        });
+
+        // Initialize clicks array for ripple effect
+        const clicksData = new Float32Array(40); // 10 clicks * 4 components
+        for (let i = 0; i < 40; i += 4) {
+            clicksData[i] = 0; // time
+            clicksData[i + 1] = 0; // isAlive
+            clicksData[i + 2] = 0; // unused
+            clicksData[i + 3] = 0; // unused
+        }
+
+        waterMaterial.onBeforeCompile = (shader) => {
+            shader.uniforms.time = { value: 0 };
+            shader.uniforms.clicks = { value: clicksData };
+            shader.uniforms.frequency = { value: 3.0 };
+            shader.uniforms.amplitude = { value: 0.2 }; // Increased from 0.1 to 0.3
+            shader.uniforms.speed = { value: 30.0 }; // Increased from 15.0 to 30.0
+            shader.uniforms.decay = { value: 2.5 };
+
+            // Add custom vertex shader code
+            shader.vertexShader =
+                `
+        uniform float time;
+        uniform float frequency;
+        uniform float amplitude;
+        uniform float speed;
+        uniform float decay;
+        uniform vec4 clicks[10];
+
+        float getWave(float dist, float clickTime, float isAlive) {
+            if (isAlive < 0.5) return 0.0;
+            
+            float timeSince = time - clickTime;
+            float phase = dist * frequency - timeSince * speed;
+            
+            // Decay based on time
+            float envelope = exp(-timeSince * decay);
+            
+            // Spatial decay (waves get smaller as they move out)
+            float spatialDecay = 1.0 / (1.0 + dist * 0.5);
+            
+            return sin(phase) * amplitude * envelope * spatialDecay;
+        }
+    ` + shader.vertexShader;
+
+            // Replace the begin_vertex chunk
+            const token = "#include <begin_vertex>";
+            const customTransform = `
+        vec3 transformed = vec3(position);
+        
+        float dx = position.x;
+        float dy = position.y;
+        float dist = sqrt(dx*dx + dy*dy);
+        
+        float totalDisplacement = 0.0;
+        vec3 totalNormal = vec3(0.0, 0.0, 1.0);
+        
+        for(int i = 0; i < 10; i++) {
+            float clickTime = clicks[i].x;
+            float isAlive = clicks[i].y;
+            
+            float displacement = getWave(dist, clickTime, isAlive);
+            totalDisplacement += displacement;
+            
+            if (isAlive > 0.5) {
+                float dzdx = displacement * dx/dist;
+                float dzdy = displacement * dy/dist;
+                totalNormal += vec3(-dzdx, -dzdy, 0.0);
+            }
+        }
+        
+        transformed.z += totalDisplacement;
+        objectNormal = normalize(totalNormal);
+        vNormal = normalMatrix * objectNormal;
+    `;
+
+            shader.vertexShader = shader.vertexShader.replace(token, customTransform);
+            window.waterShader = shader; // Store shader reference for updates
+        };
+
+        const water = new THREE.Mesh(waterGeometry, waterMaterial);
+        water.receiveShadow = true;
+        water.rotation.x = -Math.PI / 2;
+        water.position.y = 0;
+        scene.add(water);
+
+        const updateWater = (time) => {
+            if (window.waterShader) {
+                window.waterShader.uniforms.time.value = time / 1000;
+
+                // Update wave states
+                for (let i = 0; i < 40; i += 4) {
+                    if (clicksData[i + 1] > 0) {
+                        // if wave is alive
+                        const timeSince = time / 1000 - clicksData[i];
+                        if (timeSince > 5) {
+                            clicksData[i + 1] = 0; // deactivate wave
+                        }
+                    }
+                }
+            }
+        };
 
         // camera setup
         const cameraTarget = new THREE.Vector3(0, 0, 0);
@@ -1224,7 +1341,7 @@
         camera.lookAt(cameraTarget);
 
         function animateCameraForStalk() {
-            const nextRadius = currentRadius + 0.5;
+            const nextRadius = currentRadius + 0.1;
             const nextHeight = camera.position.y + 1;
 
             gsap.to(camera.position, {
@@ -1467,32 +1584,50 @@
         function emitNote() {
             if (!noteGeometry) return;
 
-            // Create note mesh
+            // Original note emission code
             const noteMaterial = new THREE.MeshBasicMaterial({
                 color: 0xffffff,
                 transparent: true,
                 opacity: 1,
             });
             const noteMesh = new THREE.Mesh(noteGeometry, noteMaterial);
-
-            // Set initial position to music emitter position
+            noteMesh.castShadow = true;
             noteMesh.position.copy(musicEmitter.position);
-
-            // Set random rotation
             noteMesh.rotation.set(Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2);
-
-            // Add to scene
             notesGroup.add(noteMesh);
 
-            // Create animation data
             const noteData = {
                 mesh: noteMesh,
                 startTime: Date.now(),
-                duration: 1000, // 1 second animation
+                duration: 1000,
                 startPosition: noteMesh.position.clone(),
                 startOpacity: 1,
             };
             activeNotes.push(noteData);
+
+            // Create water ripple
+            if (window.waterShader) {
+                // Find first inactive slot or oldest slot
+                let slotIndex = 0;
+                for (let i = 0; i < 40; i += 4) {
+                    if (clicksData[i + 1] === 0) {
+                        slotIndex = i;
+                        break;
+                    }
+                }
+                if (clicksData[slotIndex + 1] !== 0) {
+                    slotIndex = 0;
+                }
+
+                // Update ripple data
+                clicksData[slotIndex] = performance.now() / 1000; // time
+                clicksData[slotIndex + 1] = 1; // isAlive
+                clicksData[slotIndex + 2] = 0; // unused
+                clicksData[slotIndex + 3] = 0; // unused
+
+                // Update shader uniforms
+                window.waterShader.uniforms.clicks.value = clicksData;
+            }
         }
 
         function updateNotes() {
@@ -2005,6 +2140,7 @@
             if (type === "leaf" && isLeafLoaded && leafGeometry) {
                 let leafMaterial = leafNoteMat.clone();
                 nodeMesh = new THREE.Mesh(leafGeometry, leafMaterial);
+                nodeMesh.castShadow = true;
                 nodeMesh.scale.set(0, 0, 0); // Start with zero scale
                 node.targetScale = 1;
 
@@ -2028,6 +2164,7 @@
                     stalkMesh.position.copy(transform.position);
                     stalkMesh.quaternion.copy(transform.rotation);
                     stalkMesh.scale.copy(transform.scale);
+                    stalkMesh.castShadow = true;
                     nodeObjects.add(stalkMesh);
                     node.connectionMesh = stalkMesh;
                     node.connectionLine = null;
@@ -2038,6 +2175,7 @@
                     branchMesh.position.copy(transform.position);
                     branchMesh.quaternion.copy(transform.rotation);
                     branchMesh.scale.copy(transform.scale);
+                    branchMesh.castShadow = true;
                     nodeObjects.add(branchMesh);
                     node.connectionMesh = branchMesh;
                     node.connectionLine = null;
@@ -2068,6 +2206,9 @@
             // Sync timing with audio playback
             audioTime = isPlaying.value ? Date.now() - playbackStartTime.value : 0;
             elapsedTime = audioTime;
+
+            // Update water
+            updateWater(currentTime);
 
             // Update music emitter
             updateMusicEmitterPosition();
@@ -2268,64 +2409,6 @@
                 node.material = materialMap.get(key);
             }
         });
-    }
-
-    function downloadPlant() {
-        if (!scene) {
-            console.error("Scene not initialized");
-            return;
-        }
-
-        // Create a copy of the scene to export
-        const exportScene = scene.clone(true);
-
-        // Remove any UI elements or helpers
-        exportScene.traverse((object) => {
-            if (object.userData.isUI || object.isHelper || (object.type === "Line" && object.userData.isHelper)) {
-                object.removeFromParent();
-            }
-        });
-
-        // Ensure all transformations are TRS-compatible
-        ensureTRSCompatible(exportScene);
-
-        // Optimize materials
-        optimizeMaterials(exportScene);
-
-        // Configure export options
-        const options = {
-            binary: true,
-            maxTextureSize: 4096,
-            animations: [],
-            includeCustomExtensions: false,
-            onlyVisible: true,
-            trs: true, // Force TRS mode
-        };
-
-        // Create exporter
-        const exporter = new GLTFExporter();
-
-        // Export the scene
-        exporter.parse(
-            exportScene,
-            (result) => {
-                saveArrayBuffer(result, props.id + ".glb");
-
-                // Clean up
-                exportScene.traverse((object) => {
-                    if (object.geometry) {
-                        object.geometry.dispose();
-                    }
-                    if (object.material) {
-                        object.material.dispose();
-                    }
-                });
-            },
-            (error) => {
-                console.error("An error occurred while exporting:", error);
-            },
-            options,
-        );
     }
 
     const app = initializeApp(firebaseConfig);
