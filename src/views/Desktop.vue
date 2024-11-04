@@ -327,7 +327,7 @@
     const isUploading = ref(false);
     const uploadStatus = ref("");
 
-    const mobileUrl = `${window.location.origin}/mobile/${props.id}`;
+    const mobileUrl = `${window.location.origin}/controls/${props.id}`;
 
     function openInNewTab() {
         window.open(mobileUrl, "_blank");

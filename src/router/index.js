@@ -8,10 +8,8 @@ const storage = getStorage(app);
 
 // Lazy loading components
 const Home = () => import("../views/Home.vue");
-const Audio = () => import("../views/Audio.vue");
 const Desktop = () => import("../views/Desktop.vue");
 const Mobile = () => import("../views/Mobile.vue");
-const SpotifyRedirect = () => import("../views/SpotifyRedirect.vue");
 const Display = () => import("../views/Display.vue");
 const DisplayLatest = () => import("../views/DisplayLatest.vue");
 
@@ -59,43 +57,30 @@ const routes = [
         },
     },
     {
-        path: "/audio",
-        name: "audio",
-        component: Audio,
-        meta: {
-            title: "Audio",
-        },
-    },
-    {
-        path: "/desktop",
-        name: "desktop-redirect",
+        path: "/grow",
+        name: "grow-redirect",
         beforeEnter: async (to, from, next) => {
             const randomId = await generateUniqueRandomId();
-            next({ name: "desktop", params: { id: randomId } });
+            next({ name: "grow", params: { id: randomId } });
         },
     },
     {
-        path: "/desktop/:id",
-        name: "desktop",
+        path: "/grow/:id",
+        name: "grow",
         component: Desktop,
         props: true,
         meta: {
-            title: "Desktop",
+            title: "Grow",
         },
     },
     {
-        path: "/mobile/:id",
-        name: "mobile",
+        path: "/controls/:id",
+        name: "controls",
         component: Mobile,
         props: true,
         meta: {
-            title: "Mobile",
+            title: "Controls",
         },
-    },
-    {
-        path: "/mobile/redirect",
-        name: "spotify-redirect",
-        component: SpotifyRedirect,
     },
     {
         path: "/display/:id",
@@ -108,8 +93,12 @@ const routes = [
     },
     {
         path: "/latest",
-        name: "LatestPlant",
+        name: "latest",
         component: DisplayLatest,
+    },
+    {
+        path: "/:catchAll(.*)",
+        redirect: "/",
     },
 ];
 
@@ -123,7 +112,7 @@ const router = createRouter({
 });
 
 router.beforeEach((to, from, next) => {
-    document.title = to.meta.title ? `${to.meta.title} - Plants in Space` : "Your App Name";
+    document.title = to.meta.title ? `${to.meta.title} - Aetherial Verdancy` : "Your App Name";
     next();
 });
 
