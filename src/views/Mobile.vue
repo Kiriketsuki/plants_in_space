@@ -40,7 +40,7 @@
             <!-- File Upload Interface -->
             <div class="space-y-6">
                 <!-- Search Box (non-functional) -->
-                <div>
+                <!-- <div>
                     <label
                         for="search"
                         class="block text-sm font-medium text-gray-700 mb-1">
@@ -51,10 +51,10 @@
                         type="text"
                         placeholder="Enter song name..."
                         class="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" />
-                </div>
+                </div> -->
 
                 <!-- File Upload Button -->
-                <div>
+                <div class="start-hide">
                     <input
                         type="file"
                         ref="fileInput"
@@ -85,7 +85,7 @@
                                         v-model="song.name"
                                         @input="debouncedGetTempo(song)"
                                         type="text"
-                                        class="w-full p-2 border rounded-md mb-2"
+                                        class="w-full p-2 border rounded-md mb-2 start-disable"
                                         placeholder="Song name" />
                                     <!-- Tempo Input -->
                                     <div class="flex items-center space-x-2">
@@ -95,13 +95,13 @@
                                             type="number"
                                             min="1"
                                             max="300"
-                                            class="w-20 p-2 border rounded-md"
+                                            class="w-20 p-2 border rounded-md start-disable"
                                             placeholder="100" />
                                     </div>
                                 </div>
                                 <button
                                     @click="removeSong(song.id)"
-                                    class="ml-2 px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors">
+                                    class="start-hide ml-2 px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors">
                                     Remove
                                 </button>
                             </div>
@@ -109,7 +109,7 @@
                             <!-- Distribution slider -->
                             <div
                                 v-if="selectedSongs.length > 1"
-                                class="mt-2">
+                                class="mt-2 start-hide">
                                 <div>
                                     <label class="text-sm text-gray-600">Distribution: </label>
                                     <input
@@ -140,14 +140,14 @@
                     <!-- Distribution Total Warning -->
                     <div
                         v-if="selectedSongs.length > 1"
-                        class="mt-2 text-sm"
+                        class="mt-2 text-sm start-hide"
                         :class="{ 'text-red-500': !isDistributionValid, 'text-green-500': isDistributionValid }">
                         Total Distribution: {{ totalDistribution }}% (Must equal 100%)
                     </div>
                 </div>
 
                 <!-- Growth Time Selection -->
-                <div class="mt-4">
+                <div class="mt-4 start-hide">
                     <label class="block text-sm font-medium text-gray-700 mb-2">Select Plant Growth Time</label>
                     <select
                         v-model="growthTime"
@@ -160,7 +160,7 @@
                     </select>
                 </div>
 
-                <div class="mt-6">
+                <div class="mt-6 start-hide">
                     <button
                         @click="startGrowth"
                         :disabled="!canStart"
@@ -299,6 +299,7 @@
     import { ref, onMounted, onUnmounted, watch, computed } from "vue";
     import { io } from "socket.io-client";
     import { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET } from "../../secrets";
+    import { doc } from "firebase/firestore";
 
     const props = defineProps(["id"]);
     const error = ref("");
@@ -617,7 +618,7 @@
 
             const authData = await authResponse.json();
             const accessToken = authData.access_token;
-            console.log("Access Token:", accessToken);
+            // console.log("Access Token:", accessToken);
 
             // Search for the song
             const searchResponse = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(songName)}&type=track&limit=1`, {
@@ -700,6 +701,9 @@
                 growthTime: parseInt(growthTime.value),
                 distributions: songDistributions.value,
             });
+
+            document.querySelectorAll(".start-hide").forEach((el) => (el.style.display = "none"));
+            document.querySelectorAll(".start-disable").forEach((el) => (el.disabled = true));
         } catch (err) {
             error.value = "Error uploading files: " + err.message;
         }
@@ -781,7 +785,6 @@
         // - Tilting right: gamma becomes positive (up to 90)
         const gamma = event.gamma;
 
-        // Use a comfortable range of ±45 degrees for control
         let normalizedValue;
         if (gamma < -90) {
             normalizedValue = 0; // Fully left

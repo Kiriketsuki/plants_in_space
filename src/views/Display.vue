@@ -75,7 +75,8 @@
         });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.outputEncoding = THREE.sRGBEncoding;
+        // Updated from sRGBEncoding to outputColorSpace
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
 
         // Controls setup
         controls = new OrbitControls(camera, renderer.domElement);

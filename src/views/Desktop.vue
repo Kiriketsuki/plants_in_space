@@ -34,10 +34,10 @@
 
                 <!-- QR Code -->
                 <div class="mt-8 p-8 bg-white rounded-lg">
-                    <img
-                        :src="`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(mobileUrl)}`"
-                        alt="QR Code"
-                        class="w-48 h-48"
+                    <QRCode
+                        :data="mobileUrl"
+                        :size="192"
+                        class="cursor-pointer"
                         @click="openInNewTab" />
                     <p class="mt-4 text-sm text-gray-600">Scan to connect</p>
                 </div>
@@ -133,36 +133,12 @@
                             </div>
                         </div>
                     </div>
-
-                    <div class="bg-gray-800/90 rounded-lg p-4 max-w-full text-white">
-                        <h2 class="text-xl font-bold mb-2">Detected Notes</h2>
-                        <div class="space-y-2">
-                            <div
-                                v-if="detectedNotes.length"
-                                class="flex flex-row w-full h-[22vh] overflow-hidden flex-wrap justify-between">
-                                <div
-                                    v-for="note in detectedNotes"
-                                    :key="note.name"
-                                    class="bg-gray-700 w-1/6 h-[10vh] rounded p-2 flex justify-between items-center m-2">
-                                    <span class="font-medium">{{ note.name }}</span>
-                                    <div class="text-sm text-gray-300">
-                                        <span>{{ note.frequency }}</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div
-                                v-else
-                                class="text-gray-400 text-sm">
-                                No notes detected
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="h-screen w-screen bg-gray-100 absolute top-0 left-0 z-0">
+    <div class="h-screen w-screen bg-blue-900 absolute top-0 left-0 z-0">
         <canvas
             ref="canvas"
             class="w-full h-full">
@@ -171,8 +147,43 @@
 
     <div
         v-if="isCompleted"
-        class="absolute top-[10vh] left-[10vh] z-10 bg-white p-3">
-        <button @click="onDownloadClick">Download Plant</button>
+        class="absolute top-[10vh] left-[10vh] z-10 space-y-4">
+        <!-- Save Button -->
+        <button
+            v-if="!uploadComplete"
+            @click="onSaveClick"
+            :disabled="isUploading"
+            class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded transition-colors duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+            <template v-if="isUploading">
+                <svg
+                    class="animate-spin h-5 w-5 text-white"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24">
+                    <circle
+                        class="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        stroke-width="4"></circle>
+                    <path
+                        class="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Saving Plant...
+            </template>
+            <template v-else> Save Plant </template>
+        </button>
+
+        <!-- View Button -->
+        <button
+            v-else
+            @click="onViewClick"
+            class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded transition-colors duration-200">
+            View Plant
+        </button>
     </div>
 </template>
 
@@ -190,6 +201,8 @@
     import { initializeApp } from "firebase/app";
     import { firebaseConfig } from "../../secrets";
     import { getFirestore, collection, doc, setDoc, getDoc, runTransaction } from "firebase/firestore";
+
+    import QRCode from "../components/QRCode.vue";
 
     class Node {
         constructor(x, y, z, type, parent = null) {
@@ -325,7 +338,7 @@
 
     // Firebase
     const isUploading = ref(false);
-    const uploadStatus = ref("");
+    const uploadComplete = ref(false);
 
     const mobileUrl = `${window.location.origin}/controls/${props.id}`;
 
@@ -1178,12 +1191,13 @@
 
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        renderer = new THREE.WebGLRenderer({ canvas: canvas.value });
+        renderer = new THREE.WebGLRenderer({ canvas: canvas.value, antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0x000000, 0); // Set clear color to transparent
 
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
-        controls.enablePan = false;
+        // controls.enablePan = false;
 
         const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
         directionalLight.position.set(5, 5, 5);
@@ -2070,9 +2084,9 @@
             if (!isCompleted) {
                 camera.lookAt(cameraTarget);
             } else {
-                if (!controls.enablePan) {
-                    controls.enablePan = true;
-                }
+                // if (!controls.enablePan) {
+                //     controls.enablePan = true;
+                // }
                 controls.update();
             }
             renderer.render(scene, camera);
@@ -2438,7 +2452,7 @@
         });
     }
 
-    async function onDownloadClick() {
+    async function onSaveClick() {
         if (!scene) {
             console.error("Scene not initialized");
             return;
@@ -2446,24 +2460,27 @@
 
         try {
             isUploading.value = true;
-            uploadStatus.value = "Uploading...";
-
             const fileName = `${props.id}.glb`;
             const result = await savePlantToCloud(scene, fileName);
 
             if (result.success) {
-                uploadStatus.value = `Upload successful! Plant ID: ${result.id}`;
                 console.log("File uploaded successfully:", result);
+                uploadComplete.value = true;
             } else {
-                uploadStatus.value = "Upload failed";
                 console.error("Upload failed:", result.error);
             }
         } catch (error) {
             console.error("Error saving plant:", error);
-            uploadStatus.value = "Error saving plant";
         } finally {
             isUploading.value = false;
         }
+    }
+
+    function onViewClick() {
+        // Open display page in new tab
+        window.open(`/display/${props.id}`, "_blank");
+        // Redirect current page to home
+        window.location.href = "/";
     }
 
     // Lifecycle hooks
