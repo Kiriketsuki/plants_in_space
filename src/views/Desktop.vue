@@ -339,6 +339,7 @@
     let lastStalkHeight = 0;
     let currentNode = null;
     let nodeObjects = [];
+    let latestNodePosition = null;
 
     let isCompleted = false;
 
@@ -1614,7 +1615,6 @@
         function emitNote() {
             if (!noteGeometry) return;
 
-            // Original note emission code
             const noteMaterial = new THREE.MeshBasicMaterial({
                 color: 0xffffff,
                 transparent: true,
@@ -1629,15 +1629,15 @@
             const noteData = {
                 mesh: noteMesh,
                 startTime: Date.now(),
-                duration: 1000,
+                duration: MS_PER_BEAT,
                 startPosition: noteMesh.position.clone(),
+                targetPosition: latestNodePosition,
                 startOpacity: 1,
             };
             activeNotes.push(noteData);
 
-            // Create water ripple
+            // Water ripple code remains the same
             if (window.waterShader) {
-                // Find first inactive slot or oldest slot
                 let slotIndex = 0;
                 for (let i = 0; i < 40; i += 4) {
                     if (clicksData[i + 1] === 0) {
@@ -1648,14 +1648,10 @@
                 if (clicksData[slotIndex + 1] !== 0) {
                     slotIndex = 0;
                 }
-
-                // Update ripple data
-                clicksData[slotIndex] = performance.now() / 1000; // time
-                clicksData[slotIndex + 1] = 1; // isAlive
-                clicksData[slotIndex + 2] = 0; // unused
-                clicksData[slotIndex + 3] = 0; // unused
-
-                // Update shader uniforms
+                clicksData[slotIndex] = performance.now() / 1000;
+                clicksData[slotIndex + 1] = 1;
+                clicksData[slotIndex + 2] = 0;
+                clicksData[slotIndex + 3] = 0;
                 window.waterShader.uniforms.clicks.value = clicksData;
             }
         }
@@ -1667,17 +1663,27 @@
                 const elapsed = currentTime - note.startTime;
                 const progress = Math.min(elapsed / note.duration, 1);
 
-                // Move towards center
-                note.mesh.position.lerp(cameraTarget, progress);
+                // Use easeInOut for smoother movement
+                const easedProgress = easeInOutCubic(progress);
 
-                // Fade out
-                note.mesh.material.opacity = note.startOpacity * (1 - progress);
+                // Move towards target
+                note.mesh.position.lerpVectors(note.startPosition, note.targetPosition, easedProgress);
 
-                // Scale down slightly
-                const scale = 1 - progress * 0.5;
-                note.mesh.scale.setScalar(scale);
+                // Fade out near the end of travel
+                const fadeStartProgress = 0.8; // Start fading at 80% of journey
+                if (progress > fadeStartProgress) {
+                    const fadeProgress = (progress - fadeStartProgress) / (1 - fadeStartProgress);
+                    note.mesh.material.opacity = note.startOpacity * (1 - fadeProgress);
+                }
 
-                // Remove if animation complete
+                // Scale follows the same pattern as opacity
+                if (progress > fadeStartProgress) {
+                    const fadeProgress = (progress - fadeStartProgress) / (1 - fadeStartProgress);
+                    const scale = 1 - fadeProgress * 0.5;
+                    note.mesh.scale.setScalar(scale);
+                }
+
+                // Remove when journey is complete
                 if (progress >= 1) {
                     notesGroup.remove(note.mesh);
                     note.mesh.geometry.dispose();
@@ -1685,6 +1691,11 @@
                     activeNotes.splice(i, 1);
                 }
             }
+        }
+
+        // Add this easing function
+        function easeInOutCubic(x) {
+            return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
         }
 
         function calculateStalkTransform(parent, current, growthProgress = 1) {
@@ -2245,7 +2256,7 @@
 
                     let depth = node.depth;
                     if (depth === MAX_BRANCH_LENGTH - 1) {
-                        console.log("Adding flower at depth:", depth);
+                        // console.log("Adding flower at depth:", depth);
                         let flowerMaterial = new THREE.MeshStandardMaterial({
                             color: 0xff69b4,
                             metalness: 0.1,
@@ -2364,6 +2375,7 @@
 
             // If we have a current node, animate it
             if (currentNode) {
+                latestNodePosition = { x: currentNode.x, y: currentNode.y, z: currentNode.z };
                 // Calculate progress for this growth animation
                 const growthProgress = Math.min(1, (audioTime - currentGrowthStartTime) / currentQuarterBeatDuration);
 
