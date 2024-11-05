@@ -40,7 +40,7 @@
             <!-- File Upload Interface -->
             <div class="space-y-6">
                 <!-- Search Box -->
-                <div class="space-y-6">
+                <div class="space-y-6 start-hide">
                     <div class="relative">
                         <label
                             for="search"
@@ -78,6 +78,7 @@
                 </div>
 
                 <!-- File Upload Button -->
+                <!--
                 <div class="start-hide">
                     <input
                         type="file"
@@ -93,6 +94,7 @@
                         Upload Files (MP3 only, max 5)
                     </button>
                 </div>
+                -->
 
                 <!-- Selected Songs -->
                 <div v-if="selectedSongs.length > 0">
