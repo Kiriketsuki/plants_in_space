@@ -91,25 +91,6 @@
 
                         <!-- Playback Controls -->
                         <div class="space-y-4">
-                            <!-- Music Direction Slider -->
-                            <div class="bg-gray-700 rounded-lg p-4">
-                                <h3 class="text-lg font-semibold text-white mb-2">Music Direction</h3>
-                                <div class="flex items-center space-x-4">
-                                    <span class="text-gray-300">Left</span>
-                                    <input
-                                        type="range"
-                                        v-model="musicDirection"
-                                        min="0"
-                                        max="100"
-                                        class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer"
-                                        @input="updateChannelVolumes" />
-                                    <span class="text-gray-300">Right</span>
-                                </div>
-                                <div class="flex justify-between text-gray-400 mt-1">
-                                    <span>L: {{ leftVolume }}%</span>
-                                    <span>R: {{ rightVolume }}%</span>
-                                </div>
-                            </div>
                             <button
                                 @click="togglePlayback"
                                 :disabled="!allFilesLoaded"
@@ -227,23 +208,47 @@
         }
 
         calculateDepth() {
-            if (this.type === "seed") return 0;
-            if (this.type === "stalk") return 0;
-            if (this.type === "branch") return 0;
-            if (this.type === "leaf") return this.parent ? this.parent.depth + 1 : 0;
+            switch (this.type) {
+                case "seed":
+                    return 0;
 
-            let currentNode = this;
-            let depth = 0;
+                case "stalk":
+                    return 0;
 
-            while (currentNode.parent) {
-                if (currentNode.parent.type === "seed" || currentNode.parent.type === "stalk" || currentNode.parent.type === "branch") {
-                    return depth + 1;
+                case "branch": {
+                    let depth = 0;
+                    let currentNode = this;
+
+                    // Traverse up until we find a stalk or reach the root
+                    while (currentNode.parent && currentNode.parent.type !== "stalk") {
+                        depth++;
+                        currentNode = currentNode.parent;
+                    }
+
+                    return depth;
                 }
-                currentNode = currentNode.parent;
-                depth++;
-            }
 
-            return depth;
+                case "root": {
+                    let depth = 0;
+                    let currentNode = this;
+
+                    // Traverse up until we find a seed or reach the top
+                    while (currentNode.parent && currentNode.parent.type === "root") {
+                        depth++;
+                        currentNode = currentNode.parent;
+                    }
+
+                    return depth;
+                }
+
+                case "leaf": {
+                    // For leaves, maintain existing behavior
+                    return this.parent ? this.parent.depth + 1 : 0;
+                }
+
+                default:
+                    return 0;
+            }
         }
 
         calculateHeight() {
@@ -333,6 +338,8 @@
     let elapsedTime = 0;
     let lastStalkHeight = 0;
     let currentNode = null;
+    let nodeObjects = [];
+    let latestNodePosition = null;
 
     let isCompleted = false;
 
@@ -457,7 +464,7 @@
 
     // Computed properties
     const allFilesLoaded = computed(() => {
-        return selectedSongs.value.every((song) => songFiles.value.has(song.id));
+        return selectedSongs.value.every((song) => songFiles.value.has(song.id)) && selectedSongs.value.length > 0;
     });
 
     // Utility functions
@@ -1025,6 +1032,19 @@
             playbackInterval.value = null;
         }
 
+        nodeObjects.traverse((object) => {
+            if (object.userData.isFlower) {
+                gsap.to(object.scale, {
+                    x: 0.2,
+                    y: 0.2,
+                    z: 0.2,
+                    duration: 2,
+                    ease: "elastic.out(1, 0.3)",
+                    delay: Math.random() * 0.5, // Stagger the animations slightly
+                });
+            }
+        });
+
         // If there's current audio playing, adjust its volume
         if (currentAudio.value) {
             try {
@@ -1258,16 +1278,16 @@
 
         float getWave(float dist, float clickTime, float isAlive) {
             if (isAlive < 0.5) return 0.0;
-            
+
             float timeSince = time - clickTime;
             float phase = dist * frequency - timeSince * speed;
-            
+
             // Decay based on time
             float envelope = exp(-timeSince * decay);
-            
+
             // Spatial decay (waves get smaller as they move out)
             float spatialDecay = 1.0 / (1.0 + dist * 0.5);
-            
+
             return sin(phase) * amplitude * envelope * spatialDecay;
         }
     ` + shader.vertexShader;
@@ -1276,28 +1296,28 @@
             const token = "#include <begin_vertex>";
             const customTransform = `
         vec3 transformed = vec3(position);
-        
+
         float dx = position.x;
         float dy = position.y;
         float dist = sqrt(dx*dx + dy*dy);
-        
+
         float totalDisplacement = 0.0;
         vec3 totalNormal = vec3(0.0, 0.0, 1.0);
-        
+
         for(int i = 0; i < 10; i++) {
             float clickTime = clicks[i].x;
             float isAlive = clicks[i].y;
-            
+
             float displacement = getWave(dist, clickTime, isAlive);
             totalDisplacement += displacement;
-            
+
             if (isAlive > 0.5) {
                 float dzdx = displacement * dx/dist;
                 float dzdy = displacement * dy/dist;
                 totalNormal += vec3(-dzdx, -dzdy, 0.0);
             }
         }
-        
+
         transformed.z += totalDisplacement;
         objectNormal = normalize(totalNormal);
         vNormal = normalMatrix * objectNormal;
@@ -1428,7 +1448,7 @@
             leaf: [],
         };
 
-        const nodeObjects = new THREE.Group();
+        nodeObjects = new THREE.Group();
         const connectionObjects = new THREE.Group();
         scene.add(nodeObjects);
         scene.add(connectionObjects);
@@ -1454,6 +1474,7 @@
         let stalkGeometry = null;
         let branchGeometry = null;
         let leafGeometry = null;
+        let flowerGeometry = null;
         let isStalkLoaded = false;
         let isBranchLoaded = false;
         let isLeafLoaded = false;
@@ -1511,6 +1532,16 @@
                 console.error("Error loading leaf model:", error);
             },
         );
+
+        loader.load("../assets/flower.glb", (gltf) => {
+            gltf.scene.traverse((child) => {
+                if (child.isMesh && !flowerGeometry) {
+                    console.log("Found flower geometry:", child.geometry);
+                    flowerGeometry = child.geometry.clone();
+                    flowerGeometry.scale(0.5, 0.5, 0.5);
+                }
+            });
+        });
 
         // Create music emitter
         musicEmitter = new THREE.Group();
@@ -1584,7 +1615,6 @@
         function emitNote() {
             if (!noteGeometry) return;
 
-            // Original note emission code
             const noteMaterial = new THREE.MeshBasicMaterial({
                 color: 0xffffff,
                 transparent: true,
@@ -1599,15 +1629,15 @@
             const noteData = {
                 mesh: noteMesh,
                 startTime: Date.now(),
-                duration: 1000,
+                duration: MS_PER_BEAT,
                 startPosition: noteMesh.position.clone(),
+                targetPosition: latestNodePosition,
                 startOpacity: 1,
             };
             activeNotes.push(noteData);
 
-            // Create water ripple
+            // Water ripple code remains the same
             if (window.waterShader) {
-                // Find first inactive slot or oldest slot
                 let slotIndex = 0;
                 for (let i = 0; i < 40; i += 4) {
                     if (clicksData[i + 1] === 0) {
@@ -1618,14 +1648,10 @@
                 if (clicksData[slotIndex + 1] !== 0) {
                     slotIndex = 0;
                 }
-
-                // Update ripple data
-                clicksData[slotIndex] = performance.now() / 1000; // time
-                clicksData[slotIndex + 1] = 1; // isAlive
-                clicksData[slotIndex + 2] = 0; // unused
-                clicksData[slotIndex + 3] = 0; // unused
-
-                // Update shader uniforms
+                clicksData[slotIndex] = performance.now() / 1000;
+                clicksData[slotIndex + 1] = 1;
+                clicksData[slotIndex + 2] = 0;
+                clicksData[slotIndex + 3] = 0;
                 window.waterShader.uniforms.clicks.value = clicksData;
             }
         }
@@ -1637,17 +1663,27 @@
                 const elapsed = currentTime - note.startTime;
                 const progress = Math.min(elapsed / note.duration, 1);
 
-                // Move towards center
-                note.mesh.position.lerp(cameraTarget, progress);
+                // Use easeInOut for smoother movement
+                const easedProgress = easeInOutCubic(progress);
 
-                // Fade out
-                note.mesh.material.opacity = note.startOpacity * (1 - progress);
+                // Move towards target
+                note.mesh.position.lerpVectors(note.startPosition, note.targetPosition, easedProgress);
 
-                // Scale down slightly
-                const scale = 1 - progress * 0.5;
-                note.mesh.scale.setScalar(scale);
+                // Fade out near the end of travel
+                const fadeStartProgress = 0.8; // Start fading at 80% of journey
+                if (progress > fadeStartProgress) {
+                    const fadeProgress = (progress - fadeStartProgress) / (1 - fadeStartProgress);
+                    note.mesh.material.opacity = note.startOpacity * (1 - fadeProgress);
+                }
 
-                // Remove if animation complete
+                // Scale follows the same pattern as opacity
+                if (progress > fadeStartProgress) {
+                    const fadeProgress = (progress - fadeStartProgress) / (1 - fadeStartProgress);
+                    const scale = 1 - fadeProgress * 0.5;
+                    note.mesh.scale.setScalar(scale);
+                }
+
+                // Remove when journey is complete
                 if (progress >= 1) {
                     notesGroup.remove(note.mesh);
                     note.mesh.geometry.dispose();
@@ -1655,6 +1691,11 @@
                     activeNotes.splice(i, 1);
                 }
             }
+        }
+
+        // Add this easing function
+        function easeInOutCubic(x) {
+            return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
         }
 
         function calculateStalkTransform(parent, current, growthProgress = 1) {
@@ -1746,6 +1787,39 @@
                 position: position,
                 rotation: quaternion,
                 scale: scale,
+            };
+        }
+
+        function calculateFlowerTransform(node) {
+            const position = new THREE.Vector3(node.targetX, node.targetY, node.targetZ);
+            const quaternion = new THREE.Quaternion();
+
+            // Use parent's direction vector to determine flower orientation
+            // Since flower model faces up (Y-axis), start with up vector
+            const modelDirection = new THREE.Vector3(0, 1, 0);
+
+            // Get parent's growth direction
+            const parentDirection = node.directionVector.clone();
+
+            // Calculate rotation to align flower with parent's direction
+            quaternion.setFromUnitVectors(modelDirection, parentDirection);
+
+            // Add slight random rotation around the growth direction for variety
+            const randomRotation = new THREE.Quaternion();
+            randomRotation.setFromAxisAngle(parentDirection, (Math.random() * Math.PI * 1) / 4);
+            quaternion.multiply(randomRotation);
+
+            // Add slight random tilt (up to 7.5 degrees)
+            const tiltAxis = new THREE.Vector3(1, 0, 0);
+            tiltAxis.applyQuaternion(quaternion); // Rotate tilt axis to local space
+            const tiltRotation = new THREE.Quaternion();
+            tiltRotation.setFromAxisAngle(tiltAxis, (Math.random() - 0.25) * 0.125);
+            quaternion.multiply(tiltRotation);
+
+            return {
+                position: position,
+                rotation: quaternion,
+                scale: new THREE.Vector3(0.2, 0.2, 0.2), // Adjust scale as needed
             };
         }
 
@@ -2179,6 +2253,30 @@
                     nodeObjects.add(branchMesh);
                     node.connectionMesh = branchMesh;
                     node.connectionLine = null;
+
+                    let depth = node.depth;
+                    if (depth === MAX_BRANCH_LENGTH - 1) {
+                        // console.log("Adding flower at depth:", depth);
+                        let flowerMaterial = new THREE.MeshStandardMaterial({
+                            color: 0xff69b4,
+                            metalness: 0.1,
+                            roughness: 0.6,
+                        });
+                        const flowerMesh = new THREE.Mesh(flowerGeometry, flowerMaterial);
+
+                        // Calculate flower transform
+                        const transform = calculateFlowerTransform(node);
+
+                        // Apply transform but with zero scale
+                        flowerMesh.position.copy(transform.position);
+                        flowerMesh.quaternion.copy(transform.rotation);
+                        flowerMesh.scale.set(0, 0, 0); // Start with zero scale
+
+                        flowerMesh.castShadow = true;
+                        // Add a flag to identify this as a flower
+                        flowerMesh.userData.isFlower = true;
+                        nodeObjects.add(flowerMesh);
+                    }
                 } else {
                     const connectionGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(parent.x, parent.y, parent.z), new THREE.Vector3(x, y, z)]);
                     let rootMaterial = rootNoteMat.clone();
@@ -2277,6 +2375,7 @@
 
             // If we have a current node, animate it
             if (currentNode) {
+                latestNodePosition = { x: currentNode.x, y: currentNode.y, z: currentNode.z };
                 // Calculate progress for this growth animation
                 const growthProgress = Math.min(1, (audioTime - currentGrowthStartTime) / currentQuarterBeatDuration);
 
