@@ -55,7 +55,36 @@
                             <div
                                 v-if="!selectedSongs.length"
                                 class="text-gray-400 text-center py-4">
-                                Waiting for songs to be selected...
+                                <template v-if="pendingSpotifyDownloads.length">
+                                    <h3 class="text-lg font-medium mb-4">Downloading Tracks...</h3>
+                                    <div class="space-y-4 w-full">
+                                        <div
+                                            v-for="track in pendingSpotifyDownloads"
+                                            :key="track.spotifyId"
+                                            class="bg-gray-700 rounded-lg p-4 w-full">
+                                            <div class="flex w-full justify-between items-start">
+                                                <div>
+                                                    <h3 class="text-white font-bold m-0 text-start">{{ track.name }}</h3>
+                                                    <p class="text-gray-400 m-0">
+                                                        {{ track.artist }}
+                                                        <span
+                                                            class="ml-2"
+                                                            :class="{
+                                                                'text-green-400': track.status === 'complete',
+                                                                'text-yellow-400': track.status === 'downloading',
+                                                            }">
+                                                            {{ track.status === "downloading" ? "○ Downloading..." : "● Complete" }}
+                                                        </span>
+                                                    </p>
+                                                </div>
+                                                <div class="text-gray-400">
+                                                    {{ track.status === "downloading" ? "Processing..." : "Ready" }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                                <template v-else> Waiting for songs to be selected... </template>
                             </div>
                             <div
                                 v-for="(song, index) in selectedSongs"
@@ -311,6 +340,8 @@
     const musicVolume = ref(50);
     const currBPM = ref(100);
 
+    const pendingSpotifyDownloads = ref([]);
+
     // Add new audio control refs
     const musicDirection = ref(50);
     const leftVolume = computed(() => 100 - musicDirection.value);
@@ -474,6 +505,68 @@
         return `${mins}:${secs.toString().padStart(2, "0")}`;
     }
 
+    // Spotify Download
+    async function downloadSpotifyTrack(spotifyId) {
+        try {
+            // Request download from spotify-dl service
+            const response = await fetch(`https://spotify-dl-service-24702956633.asia-southeast1.run.app/download/${spotifyId}`);
+            // const response = await fetch(`http://localhost:5000/download/${spotifyId}`);
+            if (!response.ok) {
+                throw new Error(`Failed to get download URL: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+
+            // Download the file from Firebase Storage
+            const audioResponse = await fetch(data.url);
+            if (!audioResponse.ok) {
+                throw new Error("Failed to download audio file");
+            }
+
+            const arrayBuffer = await audioResponse.arrayBuffer();
+
+            // Create AudioBuffer from downloaded file
+            if (!audioContext.value) {
+                audioContext.value = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            const audioBuffer = await audioContext.value.decodeAudioData(arrayBuffer);
+            return audioBuffer;
+        } catch (error) {
+            console.error("Error downloading Spotify track:", error);
+            throw error;
+        }
+    }
+
+    async function processSong(song, type) {
+        try {
+            if (type === "spotify") {
+                pendingSpotifyDownloads.value.push({
+                    spotifyId: song.spotifyTrack.spotifyId,
+                    name: song.name,
+                    artist: song.spotifyTrack.artistName,
+                    status: "downloading",
+                });
+
+                const audioBuffer = await downloadSpotifyTrack(song.spotifyTrack.spotifyId);
+                songFiles.value.set(song.id, {
+                    audioBuffer,
+                    complete: true,
+                });
+            }
+            // Local files are handled by existing file transfer logic
+        } catch (error) {
+            console.error(`Error processing ${type} song:`, error);
+            error.value = `Error processing song: ${error.message}`;
+
+            // Update status to error
+            const downloadIndex = pendingSpotifyDownloads.value.findIndex((t) => t.spotifyId === song.spotifyTrack?.spotifyId);
+            if (downloadIndex >= 0) {
+                pendingSpotifyDownloads.value[downloadIndex].status = "error";
+            }
+        }
+    }
+
     // Socket initialization
     function initializeSocket() {
         // const url = `http://${window.location.hostname}:3000`;
@@ -580,7 +673,7 @@
         });
 
         // Modify the growth-started handler
-        socket.value.on("growth-started", ({ songs, growthTime: time, distributions }) => {
+        socket.value.on("growth-started", async ({ songs, growthTime: time, distributions }) => {
             console.log("Growth started with:", { songs, time, distributions });
 
             // Reset playback state
@@ -590,23 +683,52 @@
             }
 
             stopPlayback();
-
             currentSong.value = null;
             currentTime.value = 0;
             isPlaying.value = false;
 
             // Set new state
-            selectedSongs.value = songs;
             growthTime.value = time;
             songDistributions.value = distributions || {};
             growthActive.value = true;
-            audioStatus.value = "Ready to play";
+            audioStatus.value = "Processing songs...";
 
-            console.log("State initialized:", {
-                songCount: selectedSongs.value.length,
-                distributions: songDistributions.value,
-                duration: growthTime.value,
-            });
+            try {
+                // Process all songs in parallel
+                const processPromises = [];
+
+                // Handle Spotify tracks
+                if (songs.spotifyTracks) {
+                    songs.spotifyTracks.forEach((song) => {
+                        processPromises.push(processSong(song, "spotify"));
+                    });
+                }
+
+                // Set local files to selectedSongs for existing file transfer logic
+                if (songs.localFiles) {
+                    selectedSongs.value = songs.localFiles;
+                }
+
+                // Wait for all Spotify downloads to complete
+                await Promise.all(processPromises);
+
+                // Combine processed songs in correct order
+                selectedSongs.value = [];
+                if (songs.localFiles) selectedSongs.value.push(...songs.localFiles);
+                if (songs.spotifyTracks) selectedSongs.value.push(...songs.spotifyTracks);
+
+                audioStatus.value = "Ready to play";
+
+                console.log("All songs processed:", {
+                    songCount: selectedSongs.value.length,
+                    distributions: songDistributions.value,
+                    duration: growthTime.value,
+                });
+            } catch (err) {
+                console.error("Error processing songs:", err);
+                error.value = `Error processing songs: ${err.message}`;
+                audioStatus.value = "Error";
+            }
         });
 
         // Also add error logging to help debug
@@ -1148,6 +1270,7 @@
         error.value = "";
         audioStatus.value = "Ready";
         mobileJoined.value = false;
+        pendingSpotifyDownloads.value = [];
 
         if (currentAudio.value) {
             currentAudio.value.source.stop();
@@ -1475,6 +1598,7 @@
         let branchGeometry = null;
         let leafGeometry = null;
         let flowerGeometry = null;
+        let flowerMaterial = null;
         let isStalkLoaded = false;
         let isBranchLoaded = false;
         let isLeafLoaded = false;
@@ -1522,7 +1646,7 @@
                     if (child.isMesh && !leafGeometry) {
                         leafGeometry = child.geometry.clone();
                         leafGeometry.rotateY(Math.PI / 2);
-                        leafGeometry.scale(0.5, 0.5, 0.5);
+                        leafGeometry.scale(0.35, 0.5, 0.35);
                         isLeafLoaded = true;
                     }
                 });
@@ -1539,6 +1663,7 @@
                     console.log("Found flower geometry:", child.geometry);
                     flowerGeometry = child.geometry.clone();
                     flowerGeometry.scale(0.5, 0.5, 0.5);
+                    flowerMaterial = child.material.clone();
                 }
             });
         });
@@ -1806,14 +1931,14 @@
 
             // Add slight random rotation around the growth direction for variety
             const randomRotation = new THREE.Quaternion();
-            randomRotation.setFromAxisAngle(parentDirection, (Math.random() * Math.PI * 1) / 4);
+            randomRotation.setFromAxisAngle(parentDirection, (Math.random() * Math.PI * 1) / 8);
             quaternion.multiply(randomRotation);
 
             // Add slight random tilt (up to 7.5 degrees)
             const tiltAxis = new THREE.Vector3(1, 0, 0);
             tiltAxis.applyQuaternion(quaternion); // Rotate tilt axis to local space
             const tiltRotation = new THREE.Quaternion();
-            tiltRotation.setFromAxisAngle(tiltAxis, (Math.random() - 0.25) * 0.125);
+            tiltRotation.setFromAxisAngle(tiltAxis, (Math.random() - 0.125) * 0.05125);
             quaternion.multiply(tiltRotation);
 
             return {
@@ -2257,11 +2382,6 @@
                     let depth = node.depth;
                     if (depth === MAX_BRANCH_LENGTH - 1) {
                         // console.log("Adding flower at depth:", depth);
-                        let flowerMaterial = new THREE.MeshStandardMaterial({
-                            color: 0xff69b4,
-                            metalness: 0.1,
-                            roughness: 0.6,
-                        });
                         const flowerMesh = new THREE.Mesh(flowerGeometry, flowerMaterial);
 
                         // Calculate flower transform

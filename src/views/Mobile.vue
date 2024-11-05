@@ -39,19 +39,43 @@
 
             <!-- File Upload Interface -->
             <div class="space-y-6">
-                <!-- Search Box (non-functional) -->
-                <!-- <div>
-                    <label
-                        for="search"
-                        class="block text-sm font-medium text-gray-700 mb-1">
-                        Search Songs
-                    </label>
-                    <input
-                        id="search"
-                        type="text"
-                        placeholder="Enter song name..."
-                        class="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" />
-                </div> -->
+                <!-- Search Box -->
+                <div class="space-y-6">
+                    <div class="relative">
+                        <label
+                            for="search"
+                            class="block text-sm font-medium text-gray-700 mb-1">
+                            Search Songs
+                        </label>
+                        <input
+                            id="search"
+                            v-model="searchQuery"
+                            @input="debouncedSearch"
+                            type="text"
+                            placeholder="Search songs on Spotify..."
+                            class="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" />
+
+                        <!-- Search Results Dropdown -->
+                        <div
+                            v-if="searchResults.length > 0"
+                            class="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                            <div
+                                v-for="track in searchResults"
+                                :key="track.id"
+                                @click="selectTrack(track)"
+                                class="p-2 hover:bg-gray-100 cursor-pointer flex items-center space-x-2">
+                                <img
+                                    :src="track.album.images[2]?.url"
+                                    class="w-10 h-10 rounded"
+                                    alt="Album art" />
+                                <div class="flex-1">
+                                    <div class="font-medium">{{ track.name }}</div>
+                                    <div class="text-sm text-gray-600">{{ track.artists[0].name }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- File Upload Button -->
                 <div class="start-hide">
@@ -310,6 +334,11 @@
     const previousVolume = ref(50);
     const fileInput = ref(null);
 
+    const searchQuery = ref("");
+    const searchResults = ref([]);
+    let searchDebounceTimeout;
+    let spotifyAccessToken = ref(null);
+
     const growthTime = ref("120");
     const songDistributions = ref({});
     const isDistributionValid = ref(false);
@@ -511,6 +540,121 @@
         });
     }
 
+    // Spotify Search and Download
+    async function getSpotifyAccessToken() {
+        try {
+            const response = await fetch("https://accounts.spotify.com/api/token", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    Authorization: "Basic " + btoa(SPOTIFY_CLIENT_ID + ":" + SPOTIFY_CLIENT_SECRET),
+                },
+                body: "grant_type=client_credentials",
+            });
+
+            if (!response.ok) throw new Error("Failed to get access token");
+
+            const data = await response.json();
+            spotifyAccessToken.value = data.access_token;
+            return data.access_token;
+        } catch (error) {
+            console.error("Error getting Spotify access token:", error);
+            error.value = "Failed to connect to Spotify";
+            return null;
+        }
+    }
+
+    // Debounced search function
+    function debouncedSearch() {
+        clearTimeout(searchDebounceTimeout);
+        searchDebounceTimeout = setTimeout(() => {
+            if (searchQuery.value.length >= 2) {
+                searchSpotify();
+            } else {
+                searchResults.value = [];
+            }
+        }, 300);
+    }
+
+    // Spotify search function
+    async function searchSpotify() {
+        try {
+            if (!spotifyAccessToken.value) {
+                await getSpotifyAccessToken();
+            }
+
+            const response = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(searchQuery.value)}&type=track&limit=5`, {
+                headers: {
+                    Authorization: `Bearer ${spotifyAccessToken.value}`,
+                },
+            });
+
+            if (response.status === 401) {
+                // Token expired, get new token and retry
+                await getSpotifyAccessToken();
+                return searchSpotify();
+            }
+
+            if (!response.ok) throw new Error("Search failed");
+
+            const data = await response.json();
+            searchResults.value = data.tracks.items;
+        } catch (error) {
+            console.error("Search error:", error);
+            error.value = "Search failed";
+            searchResults.value = [];
+        }
+    }
+
+    // Function to handle track selection
+    async function selectTrack(track) {
+        // Create new song object
+        const newSong = {
+            id: Math.random().toString(36).substr(2, 9),
+            name: track.name,
+            tempo: 100, // We'll get this from audio features
+            spotifyId: track.id,
+            artist: track.artists[0].name,
+            uploaded: false,
+        };
+
+        // Get audio features for tempo
+        try {
+            const response = await fetch(`https://api.spotify.com/v1/audio-features/${track.id}`, {
+                headers: {
+                    Authorization: `Bearer ${spotifyAccessToken.value}`,
+                },
+            });
+
+            if (response.ok) {
+                const features = await response.json();
+                newSong.tempo = features.tempo;
+            }
+        } catch (error) {
+            console.error("Error getting audio features:", error);
+        }
+
+        // Add to selected songs
+        selectedSongs.value = [...selectedSongs.value, newSong];
+
+        // Initialize distributions after adding songs
+        initializeDistributions(selectedSongs.value);
+
+        // Emit the spotify track selection to the server
+        socket.emit("spotify-track-selected", {
+            roomId: props.id,
+            songId: newSong.id,
+            spotifyId: track.id,
+            trackName: track.name,
+            artistName: track.artists[0].name,
+            tempo: newSong.tempo,
+        });
+
+        // Clear search
+        searchQuery.value = "";
+        searchResults.value = [];
+    }
+
     // Song Meta Functions
 
     function initializeDistributions(songs) {
@@ -667,6 +811,7 @@
     }
 
     // Trigger growth
+    // Trigger growth
     async function startGrowth() {
         if (!socket || !socket.connected) {
             error.value = "Not connected to server. Please try reconnecting.";
@@ -679,23 +824,40 @@
             return;
         }
 
-        // Upload files and start growth
         try {
-            for (const song of selectedSongs.value) {
+            // Separate songs into local files and Spotify tracks
+            const localFiles = selectedSongs.value.filter((song) => song.file);
+            const spotifyTracks = selectedSongs.value.filter((song) => song.spotifyId);
+
+            // Upload local files if any
+            for (const song of localFiles) {
                 if (!song.uploaded) {
                     await uploadSongFile(song);
                 }
             }
 
+            // Map all songs to their basic data structure
             const songData = selectedSongs.value.map((song) => ({
                 id: song.id,
                 name: song.name,
                 tempo: song.tempo,
+                ...(song.spotifyId && {
+                    spotifyTrack: {
+                        spotifyId: song.spotifyId,
+                        artistName: song.artist,
+                    },
+                }),
             }));
+
+            // Categorize songs for the server
+            const categorizedSongs = {
+                localFiles: songData.filter((song) => !song.spotifyTrack),
+                spotifyTracks: songData.filter((song) => song.spotifyTrack),
+            };
 
             socket.emit("start-growth", {
                 roomId: props.id,
-                songs: songData,
+                songs: categorizedSongs,
                 growthTime: parseInt(growthTime.value),
                 distributions: songDistributions.value,
             });
@@ -703,7 +865,7 @@
             document.querySelectorAll(".start-hide").forEach((el) => (el.style.display = "none"));
             document.querySelectorAll(".start-disable").forEach((el) => (el.disabled = true));
         } catch (err) {
-            error.value = "Error uploading files: " + err.message;
+            error.value = "Error preparing songs: " + err.message;
         }
     }
 
@@ -824,6 +986,7 @@
 
     onMounted(async () => {
         resetState();
+        await getSpotifyAccessToken();
         socket = initializeSocket();
 
         // Check if device supports orientation
@@ -841,6 +1004,8 @@
         if (isGyroscopeEnabled.value) {
             window.removeEventListener("deviceorientation", handleOrientation);
         }
+        clearTimeout(debounceTimeout);
+        searchResults.value = [];
         resetState();
     });
 </script>
