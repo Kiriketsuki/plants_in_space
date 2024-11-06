@@ -372,6 +372,12 @@
     let nodeObjects = [];
     let latestNodePosition = null;
 
+    let leafMeshes = [];
+    let stalkMesh = null;
+    let rootMesh = null;
+    let branchMesh = null;
+    let flowerMesh = null;
+
     let isCompleted = false;
 
     // Firebase
@@ -950,6 +956,59 @@
         currentAudio.value = await playAudioBuffer(fileData.audioBuffer, remainingDuration);
         audioStatus.value = "Playing";
     }
+    const getNoteMaterial = (noteName, materialType) => {
+        noteName = noteName.charAt(0).toUpperCase();
+        const noteMap = {
+            A: 0,
+            B: 1,
+            C: 2,
+            D: 3,
+            E: 4,
+            F: 5,
+            G: 6,
+        };
+
+        switch (materialType) {
+            case "branch":
+                return branchNoteMat;
+            case "stalk":
+                return stalkNoteMat;
+            case "root":
+                return rootNoteMat;
+            case "leaf":
+                return leafMaterials[noteMap[noteName]];
+            default:
+                return leafMaterials[0];
+        }
+    };
+
+    const getNoteMesh = (noteName, nodeType) => {
+        noteName = noteName.charAt(0).toUpperCase();
+        const noteMap = {
+            A: 0,
+            B: 1,
+            C: 2,
+            D: 3,
+            E: 4,
+            F: 5,
+            G: 6,
+        };
+
+        switch (nodeType) {
+            case "branch":
+                return branchMesh;
+            case "stalk":
+                return stalkMesh;
+            case "root":
+                return rootMesh;
+            case "leaf":
+                return leafMeshes[noteMap[noteName]];
+            case "flower":
+                return flowerMesh;
+            default:
+                return leafMeshes[0];
+        }
+    };
 
     async function playAudioBuffer(audioBuffer, duration) {
         try {
@@ -1007,54 +1066,6 @@
                 return closestNote;
             }
 
-            const getNoteHue = (noteName, materialType) => {
-                const noteMap = {
-                    "F#": 0,
-                    G: 1,
-                    "G#": 2,
-                    A: 3,
-                    "A#": 4,
-                    B: 5,
-                    C: 6,
-                    "C#": 7,
-                    D: 8,
-                    "D#": 9,
-                    E: 10,
-                    F: 11,
-                };
-
-                const noteIndex = noteMap[noteName];
-
-                // Calculate base hue (0-360)
-                let hue;
-                switch (materialType) {
-                    case "leaf":
-                        // Map 0-11 to 0-160
-                        hue = noteIndex * (160 / 11);
-                        break;
-
-                    case "branch":
-                        // Map 0-11 to 12-94
-                        hue = 12 + noteIndex * (82 / 12);
-                        break;
-
-                    case "stalk":
-                        // Map 0-11 to 10-50
-                        hue = 10 + noteIndex * (40 / 12);
-                        break;
-
-                    case "root":
-                        // Map 0-11 to 0-360
-                        hue = noteIndex * (360 / 12);
-                        break;
-
-                    default:
-                        hue = 0;
-                }
-
-                return hue;
-            };
-
             function analyzeAudio() {
                 if (!isPlaying.value) return;
 
@@ -1083,37 +1094,14 @@
                             noteName: note.name.slice(0, -1),
                             octave: parseInt(note.name.slice(-1)),
                             frequency: `${frequency.toFixed(2)} Hz`,
-                            energy: energy, // Add energy to the note data
+                            energy: energy,
                         };
                     })
                     .filter((note, index, self) => index === self.findIndex((n) => n.name === note.name))
-                    // Sort by energy (highest first)
-                    .sort((a, b) => b.energy - a.energy);
+                    .sort((a, b) => b.energy - a.energy); // Sort by energy (highest first)
 
                 // Update the reactive ref
                 detectedNotes.value = detected;
-
-                // Update materials if we have detected notes
-                if (detected.length > 0) {
-                    const dominantNote = detected[0];
-                    const normalizedEnergy = ((dominantNote.energy - 200) / 55) * 50 + 50; // Map 200-255 to 50-100 range
-
-                    // Update each material
-                    const materials = [
-                        { mat: leafNoteMat, type: "leaf", lightness: 50 },
-                        { mat: branchNoteMat, type: "branch", lightness: 50 },
-                        { mat: stalkNoteMat, type: "stalk", lightness: 10 },
-                        { mat: rootNoteMat, type: "root", lightness: 10 },
-                    ];
-
-                    materials.forEach(({ mat, type, lightness }) => {
-                        const hue = getNoteHue(dominantNote.noteName, type);
-                        const color = new THREE.Color();
-                        color.setHSL(hue / 360, normalizedEnergy / 100, lightness / 100);
-                        mat.color = color;
-                        mat.needsUpdate = true;
-                    });
-                }
 
                 requestAnimationFrame(analyzeAudio);
             }
@@ -1341,7 +1329,7 @@
         directionalLight.position.set(5, 5, 5);
         scene.add(directionalLight);
 
-        const sceneLight = new THREE.AmbientLight(0xffffff, 0.5);
+        const sceneLight = new THREE.AmbientLight(0xffffff, 0.125);
         scene.add(sceneLight);
 
         // Enable shadow mapping in the renderer
@@ -1364,11 +1352,11 @@
         // Create the water surface
         const waterGeometry = new THREE.PlaneGeometry(20, 20, 100, 100);
         const waterMaterial = new THREE.MeshStandardMaterial({
-            color: new THREE.Color("#2288ff"),
+            color: new THREE.Color("#4097e3"),
             transparent: true,
-            opacity: 0.6,
-            roughness: 0.4,
-            metalness: 0.1,
+            opacity: 0.2,
+            roughness: 1.0,
+            metalness: 0.0,
             side: THREE.DoubleSide,
         });
 
@@ -1594,24 +1582,20 @@
         // First, create a loading manager to track when the model is ready
         const loadingManager = new THREE.LoadingManager();
         const loader = new GLTFLoader(loadingManager);
-        let stalkGeometry = null;
-        let branchGeometry = null;
-        let leafGeometry = null;
-        let flowerGeometry = null;
-        let flowerMaterial = null;
+
         let isStalkLoaded = false;
+        let isRootLoaded = false;
         let isBranchLoaded = false;
-        let isLeafLoaded = false;
+        let isFlowerLoaded = false;
 
         loader.load(
             "../assets/stalk.glb",
             (gltf) => {
                 gltf.scene.traverse((child) => {
-                    if (child.isMesh && !stalkGeometry) {
+                    if (child.isMesh && !stalkMesh) {
                         console.log("Found stalk geometry:", child.geometry);
-                        stalkGeometry = child.geometry.clone();
-                        stalkGeometry.scale(1, 1, 1);
-
+                        stalkMesh = child.clone();
+                        stalkMesh.scale.set(1, 1, 1);
                         isStalkLoaded = true;
                     }
                 });
@@ -1622,13 +1606,25 @@
             },
         );
 
+        loader.load("../assets/roots.glb", (gltf) => {
+            gltf.scene.traverse((child) => {
+                if (child.isMesh && !rootMesh) {
+                    console.log("Found root geometry:", child.geometry);
+                    rootMesh = child.clone();
+                    rootMesh.scale.set(1, 1, 1);
+                    isRootLoaded = true;
+                }
+            });
+        });
+
         loader.load(
             "../assets/branch_test.glb",
             (gltf) => {
                 gltf.scene.traverse((child) => {
-                    if (child.isMesh && !branchGeometry) {
-                        branchGeometry = child.geometry.clone();
-                        branchGeometry.scale(1, 1, 1);
+                    if (child.isMesh && !branchMesh) {
+                        console.log("Found branch geometry:", child.geometry);
+                        branchMesh = child.clone();
+                        branchMesh.scale.set(1, 1, 1);
                         isBranchLoaded = true;
                     }
                 });
@@ -1639,31 +1635,91 @@
             },
         );
 
-        loader.load(
-            "../assets/leaf.glb",
-            (gltf) => {
-                gltf.scene.traverse((child) => {
-                    if (child.isMesh && !leafGeometry) {
-                        leafGeometry = child.geometry.clone();
-                        leafGeometry.rotateY(Math.PI / 2);
-                        leafGeometry.scale(0.35, 0.5, 0.35);
-                        isLeafLoaded = true;
-                    }
-                });
-            },
-            undefined,
-            (error) => {
-                console.error("Error loading leaf model:", error);
-            },
-        );
-
-        loader.load("../assets/flower.glb", (gltf) => {
+        loader.load("../assets/flower_c1.glb", (gltf) => {
             gltf.scene.traverse((child) => {
-                if (child.isMesh && !flowerGeometry) {
+                if (child.isMesh && !flowerMesh) {
                     console.log("Found flower geometry:", child.geometry);
-                    flowerGeometry = child.geometry.clone();
-                    flowerGeometry.scale(0.5, 0.5, 0.5);
-                    flowerMaterial = child.material.clone();
+                    flowerMesh = child.clone();
+                    flowerMesh.scale.set(0.5, 0.5, 0.5);
+                    isFlowerLoaded = true;
+                }
+            });
+        });
+
+        function adjustLeafMesh(mesh) {
+            mesh.scale.set(0.35, 0.5, 0.35);
+            mesh.geometry.rotateY(Math.PI / 2);
+            mesh.material.roughness = 1.0;
+            mesh.material.metalness = 0.0;
+            mesh.material.envMapIntensity = 0.0;
+        }
+
+        loader.load("../assets/leaf_c1.glb", (gltf) => {
+            gltf.scene.traverse((child) => {
+                if (child.isMesh) {
+                    let mesh = child.clone();
+                    adjustLeafMesh(mesh);
+                    leafMeshes.push(mesh);
+                }
+            });
+        });
+
+        loader.load("../assets/leaf_c2.glb", (gltf) => {
+            gltf.scene.traverse((child) => {
+                if (child.isMesh) {
+                    let mesh = child.clone();
+                    adjustLeafMesh(mesh);
+                    leafMeshes.push(mesh);
+                }
+            });
+        });
+
+        loader.load("../assets/leaf_c3.glb", (gltf) => {
+            gltf.scene.traverse((child) => {
+                if (child.isMesh) {
+                    let mesh = child.clone();
+                    adjustLeafMesh(mesh);
+                    leafMeshes.push(mesh);
+                }
+            });
+        });
+
+        loader.load("../assets/leaf_c4.glb", (gltf) => {
+            gltf.scene.traverse((child) => {
+                if (child.isMesh) {
+                    let mesh = child.clone();
+                    adjustLeafMesh(mesh);
+                    leafMeshes.push(mesh);
+                }
+            });
+        });
+
+        loader.load("../assets/leaf_c5.glb", (gltf) => {
+            gltf.scene.traverse((child) => {
+                if (child.isMesh) {
+                    let mesh = child.clone();
+                    adjustLeafMesh(mesh);
+                    leafMeshes.push(mesh);
+                }
+            });
+        });
+
+        loader.load("../assets/leaf_c6.glb", (gltf) => {
+            gltf.scene.traverse((child) => {
+                if (child.isMesh) {
+                    let mesh = child.clone();
+                    adjustLeafMesh(mesh);
+                    leafMeshes.push(mesh);
+                }
+            });
+        });
+
+        loader.load("../assets/leaf_c7.glb", (gltf) => {
+            gltf.scene.traverse((child) => {
+                if (child.isMesh) {
+                    let mesh = child.clone();
+                    adjustLeafMesh(mesh);
+                    leafMeshes.push(mesh);
                 }
             });
         });
@@ -1850,6 +1906,24 @@
             };
         }
 
+        function calculateRootTransform(parent, current, growthProgress = 1) {
+            const direction = new THREE.Vector3(current.x - parent.x, current.y - parent.y, current.z - parent.z);
+            const distance = direction.length();
+            const position = new THREE.Vector3(parent.x, parent.y, parent.z);
+
+            // Calculate rotation to align with direction
+            const quaternion = new THREE.Quaternion();
+            const up = new THREE.Vector3(0, 1, 0);
+            direction.normalize();
+            quaternion.setFromUnitVectors(up, direction);
+
+            return {
+                position: position,
+                rotation: quaternion,
+                scale: new THREE.Vector3(1, distance * growthProgress, 1),
+            };
+        }
+
         function calculateBranchTransform(parent, current, growthProgress = 1) {
             const direction = new THREE.Vector3(current.x - parent.x, current.y - parent.y, current.z - parent.z);
             const distance = direction.length();
@@ -1987,7 +2061,7 @@
                     break;
                 }
                 case "stalk": {
-                    targetY = parentNode.y + 1;
+                    targetY = parentNode.y + 2;
 
                     if (parentNode.height === 3) {
                         const forkDirection = firstFork;
@@ -2016,7 +2090,7 @@
                         const startAngle = heightRotation * (Math.PI / 180);
                         const baseAngle = branchIndex * anglePerBranch * (Math.PI / 180) + startAngle;
 
-                        const baseRadius = 1.0;
+                        const baseRadius = 1.0 + 0.5;
                         const heightScale = 0.95;
                         const radius = Math.pow(heightScale, parentNode.height) * baseRadius;
 
@@ -2320,8 +2394,6 @@
                 if (type === "leaf") {
                     parent.leafCount++;
                 }
-
-                // Store parent position and calculate direction vector
                 node.parentPos = new THREE.Vector3(parent.x, parent.y, parent.z);
                 node.directionVector = new THREE.Vector3(targetPos.x - parent.x, targetPos.y - parent.y, targetPos.z - parent.z).normalize();
             }
@@ -2332,23 +2404,27 @@
                 node.targetZ = targetPos.z;
             }
 
-            const nodeColor = nodeColors[type];
-            const nodeMaterial = new THREE.MeshStandardMaterial({ color: nodeColor });
+            // Get the current dominant note, default to 'C' if no notes detected
+            const currentNote = detectedNotes.value.length > 0 ? detectedNotes.value[0].name : "C4";
 
             let nodeMesh;
-            if (type === "leaf" && isLeafLoaded && leafGeometry) {
-                let leafMaterial = leafNoteMat.clone();
-                nodeMesh = new THREE.Mesh(leafGeometry, leafMaterial);
+            if (type === "leaf") {
+                // Use getNoteMaterial for leaf material
+                // let leafMaterial = getNoteMaterial(currentNote, "leaf").clone();
+                // nodeMesh = new THREE.Mesh(leafGeometry, leafMaterial);
+                nodeMesh = getNoteMesh(currentNote, "leaf").clone();
                 nodeMesh.castShadow = true;
-                nodeMesh.scale.set(0, 0, 0); // Start with zero scale
+                nodeMesh.receiveShadow = true;
+                nodeMesh.scale.set(0, 0, 0);
                 node.targetScale = 1;
 
-                // Apply initial transform
                 const transform = calculateLeafTransform(node, 0);
                 nodeMesh.position.copy(transform.position);
                 nodeMesh.quaternion.copy(transform.rotation);
             } else {
-                nodeMesh = new THREE.Mesh(nodeGeometry, nodeMaterial);
+                // For non-leaf nodes, use regular geometry but with note-based material
+                // nodeMesh = new THREE.Mesh(nodeGeometry, getNoteMaterial(currentNote, type).clone());
+                nodeMesh = new THREE.Mesh(nodeGeometry, new THREE.MeshStandardMaterial({ color: 0x000000 }));
             }
 
             nodeMesh.position.set(x, y, z);
@@ -2356,51 +2432,63 @@
             node.mesh = nodeMesh;
 
             if (parent && type !== "leaf") {
-                if (type === "stalk" && isStalkLoaded && stalkGeometry) {
-                    let stalkMaterial = stalkNoteMat.clone();
-                    const stalkMesh = new THREE.Mesh(stalkGeometry, stalkMaterial);
+                if (type === "stalk" && isStalkLoaded) {
+                    // let stalkMaterial = getNoteMaterial(currentNote, "stalk").clone();
+                    // const stalkMesh = new THREE.Mesh(stalkGeometry, stalkMaterial);
+                    const stalkMesh = getNoteMesh(currentNote, "stalk").clone();
                     const transform = calculateStalkTransform(node.parentPos, { x, y, z }, 0);
                     stalkMesh.position.copy(transform.position);
                     stalkMesh.quaternion.copy(transform.rotation);
                     stalkMesh.scale.copy(transform.scale);
                     stalkMesh.castShadow = true;
+                    stalkMesh.receiveShadow = true;
                     nodeObjects.add(stalkMesh);
                     node.connectionMesh = stalkMesh;
                     node.connectionLine = null;
-                } else if (type === "branch" && isBranchLoaded && branchGeometry) {
-                    let branchMaterial = branchNoteMat.clone();
-                    const branchMesh = new THREE.Mesh(branchGeometry, branchMaterial);
+                } else if (type === "branch" && isBranchLoaded) {
+                    // let branchMaterial = getNoteMaterial(currentNote, "branch").clone();
+                    // const branchMesh = new THREE.Mesh(branchGeometry, branchMaterial);
+                    const branchMesh = getNoteMesh(currentNote, "branch").clone();
                     const transform = calculateBranchTransform(node.parentPos, { x, y, z }, 0);
                     branchMesh.position.copy(transform.position);
                     branchMesh.quaternion.copy(transform.rotation);
                     branchMesh.scale.copy(transform.scale);
                     branchMesh.castShadow = true;
+                    branchMesh.receiveShadow = true;
                     nodeObjects.add(branchMesh);
                     node.connectionMesh = branchMesh;
                     node.connectionLine = null;
 
                     let depth = node.depth;
                     if (depth === MAX_BRANCH_LENGTH - 1) {
-                        // console.log("Adding flower at depth:", depth);
-                        const flowerMesh = new THREE.Mesh(flowerGeometry, flowerMaterial);
-
-                        // Calculate flower transform
+                        // const flowerMesh = new THREE.Mesh(flowerGeometry, flowerMaterial);
+                        const flowerMesh = getNoteMesh(currentNote, "flower").clone();
                         const transform = calculateFlowerTransform(node);
-
-                        // Apply transform but with zero scale
                         flowerMesh.position.copy(transform.position);
                         flowerMesh.quaternion.copy(transform.rotation);
-                        flowerMesh.scale.set(0, 0, 0); // Start with zero scale
-
+                        flowerMesh.scale.set(0, 0, 0);
                         flowerMesh.castShadow = true;
-                        // Add a flag to identify this as a flower
+                        flowerMesh.receiveShadow = true;
                         flowerMesh.userData.isFlower = true;
                         nodeObjects.add(flowerMesh);
                     }
+                } else if (type === "root" && isRootLoaded) {
+                    // let rootMaterial = getNoteMaterial(currentNote, "root").clone();
+                    // const rootMesh = new THREE.Mesh(rootGeometry, rootMaterial);
+                    const rootMesh = getNoteMesh(currentNote, "root").clone();
+                    const transform = calculateRootTransform(node.parentPos, { x, y, z }, 0);
+                    rootMesh.position.copy(transform.position);
+                    rootMesh.quaternion.copy(transform.rotation);
+                    rootMesh.scale.copy(transform.scale);
+                    rootMesh.castShadow = true;
+                    rootMesh.receiveShadow = true;
+                    nodeObjects.add(rootMesh);
+                    node.connectionMesh = rootMesh;
+                    node.connectionLine = null;
                 } else {
                     const connectionGeometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(parent.x, parent.y, parent.z), new THREE.Vector3(x, y, z)]);
-                    let rootMaterial = rootNoteMat.clone();
-                    const connectionLine = new THREE.Line(connectionGeometry, rootMaterial);
+                    let fallbackMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+                    const connectionLine = new THREE.Line(connectionGeometry, fallbackMaterial);
                     connectionObjects.add(connectionLine);
                     node.connectionLine = connectionLine;
                     node.connectionMesh = null;
@@ -2524,17 +2612,20 @@
                             z: currentNode.z,
                         };
 
-                        const transform = currentNode.type === "branch" ? calculateBranchTransform(currentNode.parentPos, currentPos, growthProgress) : calculateStalkTransform(currentNode.parentPos, currentPos, growthProgress);
+                        let transform;
+                        if (currentNode.type === "branch") {
+                            transform = calculateBranchTransform(currentNode.parentPos, currentPos, growthProgress);
+                        } else if (currentNode.type === "stalk") {
+                            transform = calculateStalkTransform(currentNode.parentPos, currentPos, growthProgress);
+                        } else if (currentNode.type === "root") {
+                            transform = calculateRootTransform(currentNode.parentPos, currentPos, growthProgress);
+                        }
 
-                        currentNode.connectionMesh.position.copy(transform.position);
-                        currentNode.connectionMesh.quaternion.copy(transform.rotation);
-                        currentNode.connectionMesh.scale.copy(transform.scale);
-                    } else if (currentNode.connectionLine) {
-                        const positions = currentNode.connectionLine.geometry.attributes.position.array;
-                        positions[3] = currentNode.x;
-                        positions[4] = currentNode.y;
-                        positions[5] = currentNode.z;
-                        currentNode.connectionLine.geometry.attributes.position.needsUpdate = true;
+                        if (transform) {
+                            currentNode.connectionMesh.position.copy(transform.position);
+                            currentNode.connectionMesh.quaternion.copy(transform.rotation);
+                            currentNode.connectionMesh.scale.copy(transform.scale);
+                        }
                     }
                 }
 
@@ -2550,11 +2641,20 @@
                         currentNode.mesh.position.set(currentNode.x, currentNode.y, currentNode.z);
 
                         if (currentNode.connectionMesh && currentNode.parentPos) {
-                            const finalTransform = currentNode.type === "branch" ? calculateBranchTransform(currentNode.parentPos, currentNode, 1) : calculateStalkTransform(currentNode.parentPos, currentNode, 1);
+                            let finalTransform;
+                            if (currentNode.type === "branch") {
+                                finalTransform = calculateBranchTransform(currentNode.parentPos, currentNode, 1);
+                            } else if (currentNode.type === "stalk") {
+                                finalTransform = calculateStalkTransform(currentNode.parentPos, currentNode, 1);
+                            } else if (currentNode.type === "root") {
+                                finalTransform = calculateRootTransform(currentNode.parentPos, currentNode, 1);
+                            }
 
-                            currentNode.connectionMesh.position.copy(finalTransform.position);
-                            currentNode.connectionMesh.quaternion.copy(finalTransform.rotation);
-                            currentNode.connectionMesh.scale.copy(finalTransform.scale);
+                            if (finalTransform) {
+                                currentNode.connectionMesh.position.copy(finalTransform.position);
+                                currentNode.connectionMesh.quaternion.copy(finalTransform.rotation);
+                                currentNode.connectionMesh.scale.copy(finalTransform.scale);
+                            }
                         }
                     }
 
