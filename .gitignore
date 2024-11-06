@@ -24,3 +24,7 @@ dist-ssr
 *.sw?
 
 secrets.js
+**/music/
+SpotifyDL/.env.yaml
+SpotifyDL/Dockerfile
+SpotifyDL/firebase_key.json

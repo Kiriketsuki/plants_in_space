@@ -37,66 +37,64 @@
                 </div>
             </div>
 
-            <!-- Spotify Login -->
-            <div
-                v-if="!spotifyToken"
-                class="mb-6">
-                <button
-                    @click="loginToSpotify"
-                    class="w-full bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 transition-colors">
-                    Login with Spotify
-                </button>
-            </div>
-
-            <!-- Song Selection Interface -->
-            <div
-                v-if="spotifyToken"
-                class="space-y-6">
+            <!-- File Upload Interface -->
+            <div class="space-y-6">
                 <!-- Search Box -->
-                <div>
-                    <label
-                        for="search"
-                        class="block text-sm font-medium text-gray-700 mb-1">
-                        Search Songs
-                    </label>
-                    <input
-                        id="search"
-                        v-model="searchQuery"
-                        @input="debounceSearch"
-                        type="text"
-                        placeholder="Enter song or artist name..."
-                        class="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" />
-                </div>
+                <div class="space-y-6 start-hide">
+                    <div class="relative">
+                        <label
+                            for="search"
+                            class="block text-sm font-medium text-gray-700 mb-1">
+                            Search Songs
+                        </label>
+                        <input
+                            id="search"
+                            v-model="searchQuery"
+                            @input="debouncedSearch"
+                            type="text"
+                            placeholder="Search songs on Spotify..."
+                            class="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" />
 
-                <!-- Search Results -->
-                <div v-if="searchResults.length > 0">
-                    <h3 class="text-lg font-semibold mb-2">Search Results</h3>
-                    <div class="space-y-2 max-h-60 overflow-y-auto">
+                        <!-- Search Results Dropdown -->
                         <div
-                            v-for="track in searchResults"
-                            :key="track.id"
-                            class="flex items-center justify-between p-2 hover:bg-gray-50 rounded border">
-                            <div class="flex items-center space-x-3">
+                            v-if="searchResults.length > 0"
+                            class="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                            <div
+                                v-for="track in searchResults"
+                                :key="track.id"
+                                @click="selectTrack(track)"
+                                class="p-2 hover:bg-gray-100 cursor-pointer flex items-center space-x-2">
                                 <img
-                                    :src="track.album.images[track.album.images.length - 1]?.url"
-                                    class="w-10 h-10 object-cover rounded"
+                                    :src="track.album.images[2]?.url"
+                                    class="w-10 h-10 rounded"
                                     alt="Album art" />
-                                <div>
-                                    <p class="font-medium">{{ track.name }}</p>
-                                    <p class="text-sm text-gray-600">
-                                        {{ track.artists.map((a) => a.name).join(", ") }}
-                                    </p>
+                                <div class="flex-1">
+                                    <div class="font-medium">{{ track.name }}</div>
+                                    <div class="text-sm text-gray-600">{{ track.artists[0].name }}</div>
                                 </div>
                             </div>
-                            <button
-                                @click="selectSong(track)"
-                                :disabled="selectedSongs.length >= 5 || isSelected(track.id)"
-                                class="px-3 py-1 bg-green-500 text-white rounded-md disabled:bg-gray-300 hover:bg-green-600 transition-colors">
-                                {{ isSelected(track.id) ? "Selected" : "Select" }}
-                            </button>
                         </div>
                     </div>
                 </div>
+
+                <!-- File Upload Button -->
+                <!--
+                <div class="start-hide">
+                    <input
+                        type="file"
+                        ref="fileInput"
+                        @change="handleFileUpload"
+                        accept=".mp3"
+                        multiple
+                        class="hidden" />
+                    <button
+                        @click="triggerFileUpload"
+                        :disabled="selectedSongs.length >= 5"
+                        class="w-full bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 transition-colors disabled:bg-gray-300">
+                        Upload Files (MP3 only, max 5)
+                    </button>
+                </div>
+                -->
 
                 <!-- Selected Songs -->
                 <div v-if="selectedSongs.length > 0">
@@ -106,29 +104,38 @@
                             v-for="song in selectedSongs"
                             :key="song.id"
                             class="flex flex-col p-3 bg-gray-50 rounded border">
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center space-x-3">
-                                    <img
-                                        :src="song.album.images[song.album.images.length - 1]?.url"
-                                        class="w-12 h-12 object-cover rounded"
-                                        alt="Album art" />
-                                    <div>
-                                        <p class="font-medium">{{ song.name }}</p>
-                                        <p class="text-sm text-gray-600">
-                                            {{ song.artists.map((a) => a.name).join(", ") }}
-                                        </p>
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="flex-1">
+                                    <!-- Song Name Input -->
+                                    <input
+                                        v-model="song.name"
+                                        @input="debouncedGetTempo(song)"
+                                        type="text"
+                                        class="w-full p-2 border rounded-md mb-2 start-disable"
+                                        placeholder="Song name" />
+                                    <!-- Tempo Input -->
+                                    <div class="flex items-center space-x-2">
+                                        <label class="text-sm text-gray-600">Tempo:</label>
+                                        <input
+                                            v-model.number="song.tempo"
+                                            type="number"
+                                            min="1"
+                                            max="300"
+                                            class="w-20 p-2 border rounded-md start-disable"
+                                            placeholder="100" />
                                     </div>
                                 </div>
                                 <button
                                     @click="removeSong(song.id)"
-                                    class="px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors">
+                                    class="start-hide ml-2 px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors">
                                     Remove
                                 </button>
                             </div>
+
                             <!-- Distribution slider -->
                             <div
                                 v-if="selectedSongs.length > 1"
-                                class="mt-2">
+                                class="mt-2 start-hide">
                                 <div>
                                     <label class="text-sm text-gray-600">Distribution: </label>
                                     <input
@@ -159,14 +166,14 @@
                     <!-- Distribution Total Warning -->
                     <div
                         v-if="selectedSongs.length > 1"
-                        class="mt-2 text-sm"
+                        class="mt-2 text-sm start-hide"
                         :class="{ 'text-red-500': !isDistributionValid, 'text-green-500': isDistributionValid }">
                         Total Distribution: {{ totalDistribution }}% (Must equal 100%)
                     </div>
                 </div>
 
                 <!-- Growth Time Selection -->
-                <div class="mt-4">
+                <div class="mt-4 start-hide">
                     <label class="block text-sm font-medium text-gray-700 mb-2">Select Plant Growth Time</label>
                     <select
                         v-model="growthTime"
@@ -179,7 +186,7 @@
                     </select>
                 </div>
 
-                <div class="mt-6">
+                <div class="mt-6 start-hide">
                     <button
                         @click="startGrowth"
                         :disabled="!canStart"
@@ -193,63 +200,8 @@
                     v-if="selectedSongs.length > 0"
                     class="mt-8 bg-gray-800 rounded-lg p-4">
                     <h3 class="text-lg font-semibold text-white mb-4">Playback Controls</h3>
-
                     <!-- Controls -->
                     <div class="flex flex-col space-y-4">
-                        <!-- Main Controls -->
-                        <div class="flex justify-center items-center space-x-6">
-                            <button
-                                @click="previousSong"
-                                class="p-2 text-white hover:text-green-400 transition-colors">
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    class="h-8 w-8"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                                </svg>
-                            </button>
-
-                            <button
-                                @click="togglePlayback"
-                                class="p-3 bg-green-500 rounded-full text-white hover:bg-green-600 transition-colors">
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    class="h-8 w-8"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                </svg>
-                            </button>
-
-                            <button
-                                @click="nextSong"
-                                class="p-2 text-white hover:text-green-400 transition-colors">
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    class="h-8 w-8"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        stroke-width="2"
-                                        d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                                </svg>
-                            </button>
-                        </div>
-
                         <!-- Volume Control -->
                         <div class="flex items-center space-x-4">
                             <button
@@ -287,7 +239,6 @@
                                         d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
                                 </svg>
                             </button>
-
                             <input
                                 type="range"
                                 min="0"
@@ -295,26 +246,75 @@
                                 step="1"
                                 v-model="musicVolume"
                                 class="flex-1 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer" />
-
                             <span class="text-white text-sm w-8">
                                 {{ musicVolume }}
                             </span>
                         </div>
+                        <!-- Gyroscope Toggle -->
+                        <div
+                            v-if="isDeviceOrientation"
+                            class="flex items-center justify-between text-white text-sm mb-2">
+                            <span>Use Gyroscope Control</span>
+                            <button
+                                @click="useGyroscope = !useGyroscope"
+                                class="px-3 py-1 rounded"
+                                :class="useGyroscope ? 'bg-green-500' : 'bg-gray-600'">
+                                {{ useGyroscope ? "Enabled" : "Disabled" }}
+                            </button>
+                        </div>
+
+                        <!-- Optional calibration message -->
+                        <div
+                            v-if="useGyroscope"
+                            class="text-gray-400 text-xs mb-2">
+                            Hold your device flat and tilt left or right to control the music direction
+                        </div>
+
+                        <!-- Direction Control -->
+                        <div class="flex flex-col space-y-2">
+                            <div class="flex justify-between text-white text-sm">
+                                <span>Direction</span>
+                                <div class="flex space-x-2">
+                                    <span>L: {{ leftVolume }}%</span>
+                                    <span>R: {{ rightVolume }}%</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-4">
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    class="h-6 w-6 text-white"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                                </svg>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    step="1"
+                                    v-model="musicDirection"
+                                    @input="updateMusicDirection"
+                                    class="flex-1 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer" />
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    class="h-6 w-6 text-white"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                                </svg>
+                            </div>
+                        </div>
                     </div>
-                </div>
-
-                <!-- Loading State -->
-                <div
-                    v-if="isLoading"
-                    class="text-center py-4">
-                    <p class="text-gray-600">Searching...</p>
-                </div>
-
-                <!-- No Results -->
-                <div
-                    v-if="searchQuery && !isLoading && searchResults.length === 0"
-                    class="text-center py-4">
-                    <p class="text-gray-600">No songs found</p>
                 </div>
             </div>
         </div>
@@ -324,29 +324,40 @@
 <script setup>
     import { ref, onMounted, onUnmounted, watch, computed } from "vue";
     import { io } from "socket.io-client";
-    import { SPOTIFY_CLIENT_ID } from "../../secrets.js";
-    import { useRoute, useRouter } from "vue-router";
+    import { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET } from "../../secrets";
+    import { doc } from "firebase/firestore";
 
     const props = defineProps(["id"]);
-    const route = useRoute();
-    const router = useRouter();
     const error = ref("");
     const connectionStatus = ref("Disconnected");
     const socketId = ref(null);
-    const spotifyToken = ref(null);
-    const searchQuery = ref("");
-    const searchResults = ref([]);
     const selectedSongs = ref([]);
-    const isLoading = ref(false);
     const musicVolume = ref(50);
     const previousVolume = ref(50);
+    const fileInput = ref(null);
+
+    const searchQuery = ref("");
+    const searchResults = ref([]);
+    let searchDebounceTimeout;
+    let spotifyAccessToken = ref(null);
 
     const growthTime = ref("120");
     const songDistributions = ref({});
     const isDistributionValid = ref(false);
 
+    const musicDirection = ref(50);
+    const leftVolume = computed(() => 100 - musicDirection.value);
+    const rightVolume = computed(() => musicDirection.value);
+
+    const isDeviceOrientation = ref(false);
+    const isGyroscopeEnabled = ref(false);
+    const useGyroscope = ref(false);
+
+    let debounceTimeout;
+
+    const CHUNK_SIZE = 16384; // 16KB chunks
+
     let socket;
-    let searchTimeout;
 
     // Computed properties
     const totalDistribution = computed(() => {
@@ -354,21 +365,13 @@
     });
 
     const canStart = computed(() => {
-        return selectedSongs.value.length > 0 && selectedSongs.value.length <= 5 && (selectedSongs.value.length === 1 || isDistributionValid.value);
+        return selectedSongs.value.length > 0 && selectedSongs.value.length <= 5 && (selectedSongs.value.length === 1 || isDistributionValid.value) && selectedSongs.value.every((song) => song.name && song.tempo);
     });
-    function getRedirectUri() {
-        const protocol = "http://";
-        const hostname = window.location.hostname;
-        const port = "5173";
-        return `${protocol}${hostname}:${port}/mobile/redirect`;
-    }
 
-    const SPOTIFY_REDIRECT_URI = getRedirectUri();
-    const SPOTIFY_SCOPES = ["streaming", "user-read-email", "user-read-private"].join(" ");
-
+    // Socket Functions
     function initializeSocket() {
-        const url = `http://${window.location.hostname}:3000`;
-        // const url = "wss://us-central1-plants-in-space.cloudfunctions.net/app/";
+        // const url = `http://${window.location.hostname}:3000`;
+        const url = "https://plants-socket-24702956633.asia-southeast1.run.app";
         // const url = "https://plants-in-space-socket.onrender.com";
         connectionStatus.value = "Connecting";
 
@@ -389,6 +392,7 @@
             connectionStatus.value = "Connected";
             socketId.value = socket.id;
             socket.emit("join-room", props.id);
+            socket.emit("mobile-joined-room", props.id);
         });
 
         socket.on("connect_error", (err) => {
@@ -417,102 +421,271 @@
             error.value = "Desktop client disconnected. Please wait for reconnection.";
         });
 
+        socket.on("file-received", ({ songId }) => {
+            const song = selectedSongs.value.find((s) => s.id === songId);
+            if (song) {
+                song.uploaded = true;
+            }
+        });
+
         return socket;
     }
 
     function reconnect() {
-        error.value = "";
-        resetState();
-        socket = initializeSocket();
+        window.location.reload();
     }
 
-    function loginToSpotify() {
-        try {
-            const state = Math.random().toString(36).substring(7);
-            localStorage.setItem("spotify_auth_state", state);
-            localStorage.setItem("spotify_room_id", props.id);
+    // File Functions
 
-            const authUrlParams = new URLSearchParams({
-                response_type: "token",
-                client_id: SPOTIFY_CLIENT_ID,
-                scope: SPOTIFY_SCOPES,
-                redirect_uri: SPOTIFY_REDIRECT_URI,
-                state: state,
-                show_dialog: true,
-            });
+    function triggerFileUpload() {
+        fileInput.value.click();
+    }
 
-            const authUrl = `https://accounts.spotify.com/authorize?${authUrlParams.toString()}`;
-            window.location.href = authUrl;
-        } catch (err) {
-            console.error("Login error:", err);
-            error.value = `Failed to initialize Spotify login: ${err.message}`;
+    async function handleFileUpload(event) {
+        const files = Array.from(event.target.files);
+        // Validate file type and count
+        const invalidFiles = files.filter((file) => !file.type.includes("audio/mpeg"));
+        if (invalidFiles.length > 0) {
+            error.value = "Only MP3 files are allowed";
+            return;
         }
+
+        if (selectedSongs.value.length + files.length > 5) {
+            error.value = "Maximum 5 files allowed";
+            return;
+        }
+
+        // Process each file
+        files.forEach((file) => {
+            const newSong = {
+                id: Math.random().toString(36).substr(2, 9),
+                name: file.name.replace(".mp3", ""),
+                tempo: 100,
+                file: file,
+                size: file.size,
+                uploaded: false,
+            };
+
+            // Add the song to selected songs
+            selectedSongs.value = [...selectedSongs.value, newSong];
+        });
+
+        // Initialize distributions after adding songs
+        initializeDistributions(selectedSongs.value);
+
+        try {
+            await Promise.all(
+                selectedSongs.value.map(async (song) => {
+                    console.log("Getting tempo for:", song.name);
+                    await getSongTempo(song.name).then((tempoData) => {
+                        console.log("Tempo data:", tempoData);
+                        song.tempo = tempoData.tempo;
+                        song.name = tempoData.trackName;
+                    });
+                }),
+            );
+        } catch (err) {
+            error.value = "Error getting tempo data: " + err.message;
+        }
+
+        // Clear the input to allow selecting the same file again
+        event.target.value = "";
     }
 
-    async function verifyToken(token) {
-        try {
-            const response = await fetch("https://api.spotify.com/v1/me", {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
+    async function uploadSongFile(song) {
+        return new Promise((resolve, reject) => {
+            const file = song.file;
+            let offset = 0;
+
+            // Send file metadata first
+            socket.emit("file-meta", {
+                roomId: props.id,
+                songId: song.id,
+                filename: file.name,
+                fileSize: file.size,
+                fileType: file.type,
             });
 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+            function readAndUploadChunk() {
+                const reader = new FileReader();
+                const chunk = file.slice(offset, offset + CHUNK_SIZE);
+
+                reader.onload = function (e) {
+                    const chunkData = e.target.result;
+
+                    socket.emit("file-chunk", {
+                        roomId: props.id,
+                        songId: song.id,
+                        data: chunkData,
+                        offset: offset,
+                        final: offset + chunk.size >= file.size,
+                    });
+
+                    offset += chunk.size;
+
+                    if (offset < file.size) {
+                        readAndUploadChunk();
+                    } else {
+                        song.uploaded = true;
+                        resolve();
+                    }
+                };
+
+                reader.onerror = function (err) {
+                    reject(err);
+                };
+
+                reader.readAsArrayBuffer(chunk);
             }
+
+            readAndUploadChunk();
+        });
+    }
+
+    // Spotify Search and Download
+    async function getSpotifyAccessToken() {
+        try {
+            const response = await fetch("https://accounts.spotify.com/api/token", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    Authorization: "Basic " + btoa(SPOTIFY_CLIENT_ID + ":" + SPOTIFY_CLIENT_SECRET),
+                },
+                body: "grant_type=client_credentials",
+            });
+
+            if (!response.ok) throw new Error("Failed to get access token");
+
             const data = await response.json();
-            console.log("Spotify user verified:", data.id);
-        } catch (err) {
-            console.error("Token verification failed:", err);
-            error.value = "Failed to verify Spotify access";
-            spotifyToken.value = null;
+            spotifyAccessToken.value = data.access_token;
+            return data.access_token;
+        } catch (error) {
+            console.error("Error getting Spotify access token:", error);
+            error.value = "Failed to connect to Spotify";
+            return null;
         }
     }
 
-    async function searchSpotify() {
-        if (!searchQuery.value || !spotifyToken.value) return;
+    // Debounced search function
+    function debouncedSearch() {
+        clearTimeout(searchDebounceTimeout);
+        searchDebounceTimeout = setTimeout(() => {
+            if (searchQuery.value.length >= 2) {
+                searchSpotify();
+            } else {
+                searchResults.value = [];
+            }
+        }, 300);
+    }
 
-        isLoading.value = true;
+    // Spotify search function
+    async function searchSpotify() {
         try {
-            const response = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(searchQuery.value)}&type=track&limit=10`, {
+            if (!spotifyAccessToken.value) {
+                await getSpotifyAccessToken();
+            }
+
+            const response = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(searchQuery.value)}&type=track&limit=5`, {
                 headers: {
-                    Authorization: `Bearer ${spotifyToken.value}`,
+                    Authorization: `Bearer ${spotifyAccessToken.value}`,
                 },
             });
 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+            if (response.status === 401) {
+                // Token expired, get new token and retry
+                await getSpotifyAccessToken();
+                return searchSpotify();
             }
+
+            if (!response.ok) throw new Error("Search failed");
 
             const data = await response.json();
             searchResults.value = data.tracks.items;
-        } catch (err) {
-            console.error("Search error:", err);
-            error.value = "Failed to search Spotify";
-        } finally {
-            isLoading.value = false;
+        } catch (error) {
+            console.error("Search error:", error);
+            error.value = "Search failed";
+            searchResults.value = [];
         }
     }
 
-    function debounceSearch() {
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(searchSpotify, 300);
+    // Function to handle track selection
+    async function selectTrack(track) {
+        // Create new song object
+        const newSong = {
+            id: Math.random().toString(36).substr(2, 9),
+            name: track.name,
+            tempo: 100, // We'll get this from audio features
+            spotifyId: track.id,
+            artist: track.artists[0].name,
+            uploaded: false,
+        };
+
+        // Get audio features for tempo
+        try {
+            const response = await fetch(`https://api.spotify.com/v1/audio-features/${track.id}`, {
+                headers: {
+                    Authorization: `Bearer ${spotifyAccessToken.value}`,
+                },
+            });
+
+            if (response.ok) {
+                const features = await response.json();
+                newSong.tempo = features.tempo;
+            }
+        } catch (error) {
+            console.error("Error getting audio features:", error);
+        }
+
+        // Add to selected songs
+        selectedSongs.value = [...selectedSongs.value, newSong];
+
+        // Initialize distributions after adding songs
+        initializeDistributions(selectedSongs.value);
+
+        // Emit the spotify track selection to the server
+        socket.emit("spotify-track-selected", {
+            roomId: props.id,
+            songId: newSong.id,
+            spotifyId: track.id,
+            trackName: track.name,
+            artistName: track.artists[0].name,
+            tempo: newSong.tempo,
+        });
+
+        // Clear search
+        searchQuery.value = "";
+        searchResults.value = [];
+    }
+
+    // Song Meta Functions
+
+    function initializeDistributions(songs) {
+        if (songs.length === 0) {
+            songDistributions.value = {};
+            isDistributionValid.value = false;
+        } else if (songs.length === 1) {
+            songDistributions.value = { [songs[0].id]: 100 };
+            isDistributionValid.value = true;
+        } else {
+            const evenShare = Math.floor(100 / songs.length);
+            const remainder = 100 - evenShare * songs.length;
+
+            // Reset distributions
+            songDistributions.value = {};
+
+            // Distribute evenly
+            songs.forEach((song, index) => {
+                songDistributions.value[song.id] = evenShare + (index === 0 ? remainder : 0);
+            });
+
+            validateDistribution();
+        }
     }
 
     function updateDistributions(event, changedSongId) {
-        console.log("Updating distributions");
         const newValue = parseInt(event.target.value);
         const oldValue = songDistributions.value[changedSongId];
         const totalChange = newValue - oldValue;
-
-        console.log("Old value:", oldValue);
-        console.log("New value:", newValue);
-        console.log("Total change needed:", totalChange);
-
-        validateDistribution();
-        if (!isDistributionValid.value) {
-            songDistributions.value[changedSongId] = newValue;
-        }
 
         const newDistributions = { ...songDistributions.value };
         newDistributions[changedSongId] = newValue;
@@ -520,11 +693,10 @@
         const otherSongIds = Object.keys(songDistributions.value).filter((id) => id !== changedSongId);
 
         if (totalChange > 0) {
+            // Handle increase
             let remainingChange = totalChange;
-
             while (remainingChange > 0) {
                 let changeWasMade = false;
-
                 for (const id of otherSongIds) {
                     if (newDistributions[id] > 0 && remainingChange > 0) {
                         newDistributions[id]--;
@@ -532,18 +704,13 @@
                         changeWasMade = true;
                     }
                 }
-
-                if (!changeWasMade && remainingChange > 0) {
-                    console.log("Could not complete distribution");
-                    return;
-                }
+                if (!changeWasMade) break;
             }
         } else if (totalChange < 0) {
+            // Handle decrease
             let remainingChange = Math.abs(totalChange);
-
             while (remainingChange > 0) {
                 let changeWasMade = false;
-
                 for (const id of otherSongIds) {
                     if (newDistributions[id] < 100 && remainingChange > 0) {
                         newDistributions[id]++;
@@ -551,122 +718,160 @@
                         changeWasMade = true;
                     }
                 }
-
-                if (!changeWasMade && remainingChange > 0) {
-                    console.log("Could not complete distribution");
-                    return;
-                }
+                if (!changeWasMade) break;
             }
         }
 
-        const total = Object.values(newDistributions).reduce((sum, val) => sum + val, 0);
-        if (Math.abs(total - 100) > 0.01) {
-            console.log("Invalid total:", total);
-            return;
-        }
-
-        console.log("New distributions:", newDistributions);
         songDistributions.value = newDistributions;
         validateDistribution();
     }
 
     function validateDistribution() {
         const total = totalDistribution.value;
-        isDistributionValid.value = total === 100;
+        isDistributionValid.value = Math.abs(total - 100) < 0.01;
     }
 
-    function selectSong(track) {
-        if (selectedSongs.value.length < 5 && !isSelected(track.id)) {
-            const newSelectedSongs = [...selectedSongs.value, track];
-            selectedSongs.value = newSelectedSongs;
+    async function debouncedGetTempo(song) {
+        let name = song.name;
+        clearTimeout(debounceTimeout);
+        debounceTimeout = setTimeout(async () => {
+            console.log("Getting tempo for:", name);
+            getSongTempo(name).then((tempoData) => {
+                console.log("Tempo data:", tempoData);
+                song.tempo = tempoData.tempo;
+                song.name = tempoData.trackName;
+            });
+        }, 500);
+    }
 
-            // Set even distribution for all songs
-            const evenShare = Math.floor(1000 / newSelectedSongs.length) / 10; // Using 1000 for one decimal precision
-            songDistributions.value = newSelectedSongs.reduce((acc, song) => {
-                acc[song.id] = evenShare;
-                return acc;
-            }, {});
+    async function getSongTempo(songName) {
+        try {
+            // Get access token
+            const authResponse = await fetch("https://accounts.spotify.com/api/token", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    Authorization: "Basic " + btoa(SPOTIFY_CLIENT_ID + ":" + SPOTIFY_CLIENT_SECRET),
+                },
+                body: "grant_type=client_credentials",
+            });
 
-            // Adjust for rounding errors
-            const total = Object.values(songDistributions.value).reduce((sum, val) => sum + val, 0);
-            if (Math.abs(total - 100) > 0.01) {
-                const roundingError = (100 - total) / newSelectedSongs.length;
-                songDistributions.value = newSelectedSongs.reduce((acc, song) => {
-                    acc[song.id] = Math.round((evenShare + roundingError) * 10) / 10;
-                    return acc;
-                }, {});
+            if (!authResponse.ok) {
+                throw new Error("Failed to get access token");
             }
 
-            validateDistribution();
+            const authData = await authResponse.json();
+            const accessToken = authData.access_token;
+            // console.log("Access Token:", accessToken);
+
+            // Search for the song
+            const searchResponse = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(songName)}&type=track&limit=1`, {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                },
+            });
+
+            if (!searchResponse.ok) {
+                throw new Error("Failed to search for the song");
+            }
+
+            const searchData = await searchResponse.json();
+
+            if (!searchData.tracks.items.length) {
+                throw new Error("No tracks found");
+            }
+
+            const trackId = searchData.tracks.items[0].id;
+
+            // Get audio features for the track
+            const featuresResponse = await fetch(`https://api.spotify.com/v1/audio-features/${trackId}`, {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                },
+            });
+
+            if (!featuresResponse.ok) {
+                throw new Error("Failed to get audio features");
+            }
+
+            const featuresData = await featuresResponse.json();
+
+            return {
+                tempo: featuresData.tempo,
+                trackName: searchData.tracks.items[0].name,
+            };
+        } catch (error) {
+            console.error("Error:", error.message);
+            return { tempo: 100, trackName: songName };
         }
     }
 
     function removeSong(songId) {
         const remainingSongs = selectedSongs.value.filter((song) => song.id !== songId);
         selectedSongs.value = remainingSongs;
+        initializeDistributions(remainingSongs);
+    }
 
-        if (remainingSongs.length > 1) {
-            const evenShare = Math.floor(1000 / remainingSongs.length) / 10;
-            songDistributions.value = remainingSongs.reduce((acc, song) => {
-                acc[song.id] = evenShare;
-                return acc;
-            }, {});
-
-            // Adjust for rounding errors
-            const total = Object.values(songDistributions.value).reduce((sum, val) => sum + val, 0);
-            if (Math.abs(total - 100) > 0.01) {
-                const roundingError = (100 - total) / remainingSongs.length;
-                songDistributions.value = remainingSongs.reduce((acc, song) => {
-                    acc[song.id] = Math.round((evenShare + roundingError) * 10) / 10;
-                    return acc;
-                }, {});
-            }
-        } else if (remainingSongs.length === 1) {
-            songDistributions.value = { [remainingSongs[0].id]: 100 };
-        } else {
-            songDistributions.value = {};
+    // Trigger growth
+    // Trigger growth
+    async function startGrowth() {
+        if (!socket || !socket.connected) {
+            error.value = "Not connected to server. Please try reconnecting.";
+            return;
         }
 
         validateDistribution();
-    }
+        if (!isDistributionValid.value && selectedSongs.value.length > 1) {
+            error.value = "Distribution must equal 100%";
+            return;
+        }
 
-    function isSelected(trackId) {
-        return selectedSongs.value.some((song) => song.id === trackId);
-    }
+        try {
+            // Separate songs into local files and Spotify tracks
+            const localFiles = selectedSongs.value.filter((song) => song.file);
+            const spotifyTracks = selectedSongs.value.filter((song) => song.spotifyId);
 
-    function startGrowth() {
-        if (socket && socket.connected) {
+            // Upload local files if any
+            for (const song of localFiles) {
+                if (!song.uploaded) {
+                    await uploadSongFile(song);
+                }
+            }
+
+            // Map all songs to their basic data structure
+            const songData = selectedSongs.value.map((song) => ({
+                id: song.id,
+                name: song.name,
+                tempo: song.tempo,
+                ...(song.spotifyId && {
+                    spotifyTrack: {
+                        spotifyId: song.spotifyId,
+                        artistName: song.artist,
+                    },
+                }),
+            }));
+
+            // Categorize songs for the server
+            const categorizedSongs = {
+                localFiles: songData.filter((song) => !song.spotifyTrack),
+                spotifyTracks: songData.filter((song) => song.spotifyTrack),
+            };
+
             socket.emit("start-growth", {
                 roomId: props.id,
-                songs: selectedSongs.value,
+                songs: categorizedSongs,
                 growthTime: parseInt(growthTime.value),
                 distributions: songDistributions.value,
             });
-        } else {
-            error.value = "Not connected to server. Please try reconnecting.";
+
+            document.querySelectorAll(".start-hide").forEach((el) => (el.style.display = "none"));
+            document.querySelectorAll(".start-disable").forEach((el) => (el.disabled = true));
+        } catch (err) {
+            error.value = "Error preparing songs: " + err.message;
         }
     }
 
     // Playback control functions
-    function togglePlayback() {
-        if (socket && socket.connected) {
-            console.log("Toggling playback");
-            socket.emit("toggle-playback", { roomId: props.id });
-        }
-    }
-
-    function nextSong() {
-        if (socket && socket.connected) {
-            socket.emit("next-song", { roomId: props.id });
-        }
-    }
-
-    function previousSong() {
-        if (socket && socket.connected) {
-            socket.emit("previous-song", { roomId: props.id });
-        }
-    }
-
     function toggleMute() {
         if (musicVolume.value > 0) {
             previousVolume.value = musicVolume.value;
@@ -676,48 +881,101 @@
         }
     }
 
+    function updateMusicDirection() {
+        socket.emit("music-direction-updated", {
+            roomId: props.id,
+            direction: musicDirection.value,
+        });
+    }
+
+    // Gyroscope Functions
+    function checkDeviceOrientation() {
+        return new Promise((resolve) => {
+            if (typeof DeviceOrientationEvent !== "undefined") {
+                // Check if device orientation permission is needed (iOS 13+)
+                if (typeof DeviceOrientationEvent.requestPermission === "function") {
+                    isDeviceOrientation.value = true;
+                    resolve(true);
+                } else {
+                    // Android and older iOS devices
+                    window.addEventListener("deviceorientation", function handler(event) {
+                        window.removeEventListener("deviceorientation", handler);
+                        isDeviceOrientation.value = Boolean(event && event.gamma);
+                        resolve(Boolean(event && event.gamma));
+                    });
+                }
+            } else {
+                isDeviceOrientation.value = false;
+                resolve(false);
+            }
+        });
+    }
+
+    async function requestGyroscopePermission() {
+        try {
+            if (typeof DeviceOrientationEvent.requestPermission === "function") {
+                // iOS 13+ devices
+                const permission = await DeviceOrientationEvent.requestPermission();
+                isGyroscopeEnabled.value = permission === "granted";
+                if (permission === "granted") {
+                    initializeGyroscope();
+                }
+            } else {
+                // Android and older iOS devices
+                isGyroscopeEnabled.value = true;
+                initializeGyroscope();
+            }
+        } catch (error) {
+            console.error("Error requesting gyroscope permission:", error);
+            isGyroscopeEnabled.value = false;
+        }
+    }
+
+    function initializeGyroscope() {
+        if (!isGyroscopeEnabled.value) return;
+
+        window.addEventListener("deviceorientation", handleOrientation);
+    }
+
+    function handleOrientation(event) {
+        if (!useGyroscope.value) return;
+
+        // gamma is the left-to-right tilt in degrees
+        // When phone is vertical and facing user:
+        // - Neutral position: gamma ≈ 0
+        // - Tilting left: gamma becomes negative (down to -90)
+        // - Tilting right: gamma becomes positive (up to 90)
+        const gamma = event.gamma;
+
+        let normalizedValue;
+        if (gamma < -90) {
+            normalizedValue = 0; // Fully left
+        } else if (gamma > 90) {
+            normalizedValue = 100; // Fully right
+        } else {
+            // Map -45 to +45 range to 0-100
+            normalizedValue = ((gamma + 90) / 180) * 100;
+        }
+
+        // Add smoothing to prevent jitter
+        if (Math.abs(musicDirection.value - normalizedValue) > 1) {
+            musicDirection.value = Math.round(normalizedValue);
+            updateMusicDirection();
+        }
+    }
+
     function resetState() {
-        searchResults.value = [];
-        searchQuery.value = "";
-        error.value = "";
-        spotifyToken.value = null;
-        socketId.value = null;
         selectedSongs.value = [];
+        error.value = "";
+        socketId.value = null;
         musicVolume.value = 50;
         previousVolume.value = 50;
         growthTime.value = "120";
         songDistributions.value = {};
         isDistributionValid.value = false;
+        leftVolume.value = 50;
+        rightVolume.value = 50;
     }
-
-    // Watchers for state changes
-    watch(selectedSongs, (newSongs) => {
-        if (socket && socket.connected) {
-            socket.emit("update-songs", {
-                roomId: props.id,
-                songs: newSongs,
-                distributions: songDistributions.value,
-            });
-        }
-
-        // Reset distributions when songs change
-        if (newSongs.length === 1) {
-            songDistributions.value = { [newSongs[0].id]: 100 };
-            isDistributionValid.value = true;
-        } else if (newSongs.length > 1) {
-            // Initialize even distribution
-            const evenShare = Math.floor(100 / newSongs.length);
-            const remainder = 100 - evenShare * newSongs.length;
-            songDistributions.value = newSongs.reduce((acc, song, index) => {
-                acc[song.id] = evenShare + (index === 0 ? remainder : 0);
-                return acc;
-            }, {});
-            validateDistribution();
-        } else {
-            songDistributions.value = {};
-            isDistributionValid.value = false;
-        }
-    });
 
     watch(musicVolume, (newVolume) => {
         if (socket && socket.connected) {
@@ -728,18 +986,15 @@
         }
     });
 
-    onMounted(() => {
+    onMounted(async () => {
         resetState();
+        await getSpotifyAccessToken();
         socket = initializeSocket();
 
-        // Handle Spotify token from redirect
-        const token = route.query.spotifyToken;
-        if (token) {
-            console.log("Received Spotify token from redirect");
-            spotifyToken.value = token;
-            socket.emit("spotify-token", { roomId: props.id, token });
-            router.replace({ path: route.path });
-            verifyToken(token);
+        // Check if device supports orientation
+        const hasOrientation = await checkDeviceOrientation();
+        if (hasOrientation) {
+            await requestGyroscopePermission();
         }
     });
 
@@ -748,6 +1003,11 @@
             socket.disconnect();
             socket = null;
         }
+        if (isGyroscopeEnabled.value) {
+            window.removeEventListener("deviceorientation", handleOrientation);
+        }
+        clearTimeout(debounceTimeout);
+        searchResults.value = [];
         resetState();
     });
 </script>

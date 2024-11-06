@@ -3,6 +3,11 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
+import fs from "fs";
+import path from "path";
+
+// Map to store file chunks
+const fileChunks = new Map();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -29,6 +34,7 @@ class Room {
         this.lastActivity = Date.now();
         this.spotifyToken = null;
         this.selectedSongs = [];
+        this.spotifyTracks = new Map(); // New: Store Spotify track information
     }
 
     setMobileClient(socketId) {
@@ -59,6 +65,15 @@ class Room {
         this.spotifyToken = token;
     }
 
+    addSpotifyTrack(songId, trackInfo) {
+        this.spotifyTracks.set(songId, trackInfo);
+    }
+
+    // New: Get Spotify track info
+    getSpotifyTrack(songId) {
+        return this.spotifyTracks.get(songId);
+    }
+
     updateSelectedSongs(songs) {
         this.selectedSongs = songs;
     }
@@ -78,6 +93,7 @@ class Room {
     reset() {
         this.spotifyToken = null;
         this.selectedSongs = [];
+        this.spotifyTracks.clear();
         this.lastActivity = Date.now();
     }
 
@@ -104,6 +120,10 @@ io.on("connection", (socket) => {
 
         // Request client type
         socket.emit("get-client-type");
+    });
+
+    socket.on("mobile-joined-room", (roomId) => {
+        io.to(roomId).emit("mobile-joined-room");
     });
 
     socket.on("client-type-response", (clientType) => {
@@ -154,6 +174,54 @@ io.on("connection", (socket) => {
         }
     });
 
+    // Handle file metadata
+    socket.on("file-meta", (data) => {
+        console.log("Received file metadata:", data);
+        const { roomId, songId, filename, fileSize } = data;
+
+        // Initialize chunk storage for this file
+        if (!fileChunks.has(songId)) {
+            fileChunks.set(songId, {
+                chunks: [],
+                size: fileSize,
+                received: 0,
+            });
+        }
+
+        // Forward metadata to desktop client
+        socket.to(roomId).emit("file-meta", { songId, filename, fileSize });
+    });
+
+    // Handle file chunks
+    socket.on("file-chunk", (data) => {
+        console.log("Received file chunk:", data);
+        const { roomId, songId, data: chunkData, offset, final } = data;
+
+        const fileData = fileChunks.get(songId);
+        if (fileData) {
+            // Store chunk
+            fileData.chunks.push({
+                data: chunkData,
+                offset: offset,
+            });
+            fileData.received += chunkData.byteLength;
+
+            // Forward chunk to desktop client
+            socket.to(roomId).emit("file-chunk", {
+                songId,
+                data: chunkData,
+                offset,
+                final,
+            });
+
+            // Clean up if this is the final chunk
+            if (final) {
+                socket.emit("file-received", { songId });
+                fileChunks.delete(songId);
+            }
+        }
+    });
+
     socket.on("update-songs", ({ roomId, songs }) => {
         console.log(`Updating songs for room ${roomId}`);
         const room = rooms.get(roomId);
@@ -163,16 +231,83 @@ io.on("connection", (socket) => {
         }
     });
 
+    socket.on("spotify-track-selected", ({ roomId, songId, spotifyId, trackName, artistName, tempo }) => {
+        console.log(`Received Spotify track selection for room ${roomId}:`, { songId, spotifyId, trackName });
+        const room = rooms.get(roomId);
+        if (room && room.isMobileClient(socket.id)) {
+            // Store track information
+            room.addSpotifyTrack(songId, {
+                spotifyId,
+                trackName,
+                artistName,
+                tempo,
+            });
+
+            // Forward the track information to the desktop client
+            socket.to(roomId).emit("spotify-track-selected", {
+                songId,
+                spotifyId,
+                trackName,
+                artistName,
+                tempo,
+            });
+
+            // Acknowledge receipt
+            socket.emit("spotify-track-confirmed", { songId });
+        }
+    });
+
     socket.on("start-growth", ({ roomId, songs, growthTime, distributions }) => {
         console.log(`Received growth start request for room ${roomId}`);
         const room = rooms.get(roomId);
+
         if (room && room.isMobileClient(socket.id)) {
-            // Send the growth data to all clients in the room
-            io.to(roomId).emit("growth-started", {
-                songs,
-                growthTime,
-                distributions,
-            });
+            // Check if songs is the new categorized format
+            if (songs.localFiles || songs.spotifyTracks) {
+                // Already categorized, send as is
+                io.to(roomId).emit("growth-started", {
+                    songs,
+                    growthTime,
+                    distributions,
+                });
+
+                console.log(`Growth started in room ${roomId}:`, {
+                    totalSongs: (songs.localFiles?.length || 0) + (songs.spotifyTracks?.length || 0),
+                    localFiles: songs.localFiles?.length || 0,
+                    spotifyTracks: songs.spotifyTracks?.length || 0,
+                    growthTime,
+                });
+            } else {
+                // Handle legacy format - convert to categorized format
+                const categorizedSongs = {
+                    localFiles: [],
+                    spotifyTracks: [],
+                };
+
+                // Ensure songs is an array
+                const songsArray = Array.isArray(songs) ? songs : [songs];
+
+                songsArray.forEach((song) => {
+                    if (song.spotifyTrack) {
+                        categorizedSongs.spotifyTracks.push(song);
+                    } else {
+                        categorizedSongs.localFiles.push(song);
+                    }
+                });
+
+                io.to(roomId).emit("growth-started", {
+                    songs: categorizedSongs,
+                    growthTime,
+                    distributions,
+                });
+
+                console.log(`Growth started in room ${roomId}:`, {
+                    totalSongs: songsArray.length,
+                    localFiles: categorizedSongs.localFiles.length,
+                    spotifyTracks: categorizedSongs.spotifyTracks.length,
+                    growthTime,
+                });
+            }
         }
     });
 
@@ -180,6 +315,13 @@ io.on("connection", (socket) => {
         const room = rooms.get(roomId);
         if (room && room.isMobileClient(socket.id)) {
             io.to(roomId).emit("volume-updated", { volume });
+        }
+    });
+
+    socket.on("music-direction-updated", ({ roomId, direction }) => {
+        const room = rooms.get(roomId);
+        if (room && room.isMobileClient(socket.id)) {
+            io.to(roomId).emit("music-direction-updated", { direction });
         }
     });
 
@@ -218,6 +360,7 @@ io.on("connection", (socket) => {
                 // If it's a desktop client, ensure we clean up Spotify tokens
                 if (!isMobile) {
                     room.spotifyToken = null;
+                    room.spotifyTracks.clear();
                     console.log(`Cleared Spotify token for room ${currentRoom}`);
                 }
             }
@@ -267,12 +410,14 @@ app.get("/api/rooms/:roomId/status", (req, res) => {
             hasMobile: !!room.mobileClient,
             hasSpotifyToken: !!room.spotifyToken,
             selectedSongsCount: room.selectedSongs.length,
+            spotifyTracksCount: room.spotifyTracks.size,
         });
         res.json({
             hasDesktop: !!room.desktopClient,
             hasMobile: !!room.mobileClient,
             hasSpotifyToken: !!room.spotifyToken,
             selectedSongsCount: room.selectedSongs.length,
+            spotifyTracksCount: room.spotifyTracks.size,
         });
     } else {
         console.log(`Status request for non-existent room ${req.params.roomId}`);
