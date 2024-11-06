@@ -1354,7 +1354,7 @@
         const waterMaterial = new THREE.MeshStandardMaterial({
             color: new THREE.Color("#4097e3"),
             transparent: true,
-            opacity: 0.2,
+            opacity: 0.5,
             roughness: 1.0,
             metalness: 0.0,
             side: THREE.DoubleSide,
@@ -1589,7 +1589,7 @@
         let isFlowerLoaded = false;
 
         loader.load(
-            "../assets/stalk.glb",
+            "../assets/stalk_c1.glb",
             (gltf) => {
                 gltf.scene.traverse((child) => {
                     if (child.isMesh && !stalkMesh) {
@@ -1618,7 +1618,7 @@
         });
 
         loader.load(
-            "../assets/branch_test.glb",
+            "../assets/branch_c1.glb",
             (gltf) => {
                 gltf.scene.traverse((child) => {
                     if (child.isMesh && !branchMesh) {
@@ -1817,7 +1817,6 @@
             };
             activeNotes.push(noteData);
 
-            // Water ripple code remains the same
             if (window.waterShader) {
                 let slotIndex = 0;
                 for (let i = 0; i < 40; i += 4) {

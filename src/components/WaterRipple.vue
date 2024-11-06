@@ -12,13 +12,9 @@
     export default {
         name: "WaterRipple",
         props: {
-            width: {
+            radius: {
                 type: Number,
-                default: 20,
-            },
-            height: {
-                type: Number,
-                default: 20,
+                default: 10,
             },
             segments: {
                 type: Number,
@@ -78,7 +74,8 @@
                 renderer.setSize(container.value.clientWidth, container.value.clientHeight);
                 container.value.appendChild(renderer.domElement);
 
-                const geometry = new THREE.PlaneGeometry(props.width, props.height, props.segments, props.segments);
+                // Changed from PlaneGeometry to CircleGeometry
+                const geometry = new THREE.CircleGeometry(props.radius, props.segments);
 
                 const material = new THREE.MeshPhongMaterial({
                     color: new THREE.Color(props.color),
@@ -127,25 +124,32 @@
           float dy = position.y;
           float dist = sqrt(dx*dx + dy*dy);
           
-          float totalDisplacement = 0.0;
-          vec3 totalNormal = vec3(0.0, 0.0, 1.0);
-          
-          for(int i = 0; i < 10; i++) {
-            float clickTime = clicks[i].x;
-            float isAlive = clicks[i].y;
+          // Only apply wave effect within the circle radius
+          if (dist <= ${props.radius.toFixed(1)}) {
+            float totalDisplacement = 0.0;
+            vec3 totalNormal = vec3(0.0, 0.0, 1.0);
             
-            float displacement = getWave(dist, clickTime, isAlive);
-            totalDisplacement += displacement;
-            
-            if (isAlive > 0.5) {
-              float dzdx = displacement * dx/dist;
-              float dzdy = displacement * dy/dist;
-              totalNormal += vec3(-dzdx, -dzdy, 0.0);
+            for(int i = 0; i < 10; i++) {
+              float clickTime = clicks[i].x;
+              float isAlive = clicks[i].y;
+              
+              float displacement = getWave(dist, clickTime, isAlive);
+              totalDisplacement += displacement;
+              
+              if (isAlive > 0.5) {
+                float dzdx = displacement * dx/dist;
+                float dzdy = displacement * dy/dist;
+                totalNormal += vec3(-dzdx, -dzdy, 0.0);
+              }
             }
+            
+            transformed.z += totalDisplacement;
+            objectNormal = normalize(totalNormal);
+          } else {
+            transformed.z = 0.0;
+            objectNormal = vec3(0.0, 0.0, 1.0);
           }
           
-          transformed.z += totalDisplacement;
-          objectNormal = normalize(totalNormal);
           vNormal = normalMatrix * objectNormal;
         `;
 
