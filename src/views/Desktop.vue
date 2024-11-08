@@ -56,7 +56,7 @@
                                 v-if="!selectedSongs.length"
                                 class="text-gray-400 text-center py-4">
                                 <template v-if="pendingSpotifyDownloads.length">
-                                    <h3 class="text-lg font-medium mb-4">Downloading Tracks...</h3>
+                                    <!-- <h3 class="text-lg font-medium mb-4">Downloading Tracks...</h3> -->
                                     <div class="space-y-4 w-full">
                                         <div
                                             v-for="track in pendingSpotifyDownloads"
@@ -65,21 +65,21 @@
                                             <div class="flex w-full justify-between items-start">
                                                 <div>
                                                     <h3 class="text-white font-bold m-0 text-start">{{ track.name }}</h3>
-                                                    <p class="text-gray-400 m-0">
+                                                    <p class="text-gray-400 m-0 text-start">
                                                         {{ track.artist }}
-                                                        <span
-                                                            class="ml-2"
-                                                            :class="{
-                                                                'text-green-400': track.status === 'complete',
-                                                                'text-yellow-400': track.status === 'downloading',
-                                                            }">
-                                                            {{ track.status === "downloading" ? "○ Downloading..." : "● Complete" }}
-                                                        </span>
                                                     </p>
                                                 </div>
-                                                <div class="text-gray-400">
+                                                <span
+                                                    class="ml-2"
+                                                    :class="{
+                                                        'text-green-400': track.status === 'complete',
+                                                        'text-yellow-400': track.status === 'downloading',
+                                                    }">
+                                                    {{ track.status === "downloading" ? "○ Downloading..." : "● Complete" }}
+                                                </span>
+                                                <!-- <div class="text-gray-400">
                                                     {{ track.status === "downloading" ? "Processing..." : "Ready" }}
-                                                </div>
+                                                </div> -->
                                             </div>
                                         </div>
                                     </div>
@@ -1131,6 +1131,19 @@
             }
         });
 
+        gsap.to(camera.position, {
+            duration: 2,
+            x: 20,
+            // y: lastStalkHeight * 0.5 * 1.5,
+            y: 0,
+            z: 20,
+            ease: "power2.inOut",
+            onComplete: () => {
+                // controls.target(0, camera.position.y, 0);
+                controls.target = new THREE.Vector3(0, camera.position.y, 0);
+            },
+        });
+
         // If there's current audio playing, adjust its volume
         if (currentAudio.value) {
             try {
@@ -1326,7 +1339,56 @@
         directionalLight.position.set(10, 15, 10);
 
         // Create the water surface
-        const waterGeometry = new THREE.PlaneGeometry(20, 20, 100, 100);
+        // const waterGeometry = new THREE.PlaneGeometry(20, 20, 100, 100);
+        function createCircularWaterGeometry(radius, segments) {
+            const geometry = new THREE.BufferGeometry();
+            const vertices = [];
+            const uvs = [];
+            const indices = [];
+
+            // Create vertices
+            for (let i = 0; i <= segments; i++) {
+                for (let j = 0; j <= segments; j++) {
+                    const u = j / segments;
+                    const v = i / segments;
+                    const theta = u * Math.PI * 2;
+                    const r = v * radius;
+
+                    // Convert to Cartesian coordinates
+                    const x = r * Math.cos(theta);
+                    const y = r * Math.sin(theta);
+
+                    vertices.push(x, y, 0);
+
+                    // UV coordinates mapped as if it were a plane
+                    uvs.push((x + radius) / (2 * radius), (y + radius) / (2 * radius));
+                }
+            }
+
+            // Create indices
+            for (let i = 0; i < segments; i++) {
+                for (let j = 0; j < segments; j++) {
+                    const a = i * (segments + 1) + j;
+                    const b = a + 1;
+                    const c = a + segments + 1;
+                    const d = c + 1;
+
+                    indices.push(a, b, c);
+                    indices.push(b, d, c);
+                }
+            }
+
+            geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+            geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+            geometry.setIndex(indices);
+            geometry.computeVertexNormals();
+
+            return geometry;
+        }
+
+        // Usage:
+        const waterGeometry = createCircularWaterGeometry(10, 100); // radius = 10, segments = 100
+        // const water = new THREE.Mesh(waterGeometry, waterMaterial);
         const waterMaterial = new THREE.MeshStandardMaterial({
             color: new THREE.Color("#4097e3"),
             transparent: true,
@@ -1437,8 +1499,24 @@
             }
         };
 
+        let waterVolume = new THREE.CylinderGeometry(10, 10, 10, 100, 1, true);
+        const waterVolumeMaterial = new THREE.MeshPhysicalMaterial({
+            color: new THREE.Color("#4097e3"),
+            transparent: true,
+            opacity: 0.2,
+            roughness: 0,
+            metalness: 0.1,
+            transmission: 0.9,
+            thickness: 1.0,
+            side: THREE.DoubleSide,
+        });
+
+        let waterVolumeMesh = new THREE.Mesh(waterVolume, waterVolumeMaterial);
+        waterVolumeMesh.position.y = -5.01;
+        scene.add(waterVolumeMesh);
+
         // camera setup
-        let currentRadius = 9.5; // Start with 15 units radius
+        let currentRadius = 9; // Start with 15 units radius
 
         // Set initial camera position
         camera.position.x = 20;
@@ -1449,7 +1527,7 @@
 
         function animateCameraForStalk() {
             const nextRadius = currentRadius + 0.1;
-            const nextHeight = lastStalkHeight * 1.5 + 1.5;
+            const nextHeight = lastStalkHeight * 1.75 + 1.5;
 
             gsap.to(camera.position, {
                 y: nextHeight,
@@ -1585,7 +1663,7 @@
         loader.load("../assets/roots_c1.glb", (gltf) => {
             gltf.scene.traverse((child) => {
                 if (child.isMesh && !rootMesh) {
-                    console.log("Found root geometry:", child.geometry);
+                    // console.log("Found root geometry:", child.geometry);
                     rootMesh = child.clone();
                     // rootMesh.geometry.rotateY(Math.PI / 2);
                     rootMesh.scale.set(1, 1, 1);
@@ -1599,7 +1677,7 @@
             (gltf) => {
                 gltf.scene.traverse((child) => {
                     if (child.isMesh && !branchMesh) {
-                        console.log("Found branch geometry:", child.geometry);
+                        // console.log("Found branch geometry:", child.geometry);
                         branchMesh = child.clone();
                         branchMesh.scale.set(1, 1, 1);
                         isBranchLoaded = true;
@@ -2038,7 +2116,7 @@
                     break;
                 }
                 case "stalk": {
-                    targetY = parentNode.y + 2;
+                    targetY = parentNode.y + 2.0;
 
                     if (parentNode.height === 3) {
                         const forkDirection = firstFork;
@@ -2382,9 +2460,10 @@
             // Calculate median note
             let currentNote = "C4";
             if (detectedNotes.value.length > 0) {
-                const sortedNotes = [...detectedNotes.value].sort((a, b) => a.midi - b.midi);
+                const sortedNotes = [...detectedNotes.value].sort((a, b) => a.energy - b.energy);
                 const midIndex = Math.floor(sortedNotes.length / 2);
                 currentNote = sortedNotes[midIndex].name;
+                // console.log("Median note:", currentNote);
             }
 
             let nodeMesh;
@@ -2466,8 +2545,7 @@
             return node;
         }
 
-        let cameraNotMoved = true;
-
+        let cameraMoved = false;
         const animate = (currentTime) => {
             animationFrameId = requestAnimationFrame(animate);
 
@@ -2504,24 +2582,19 @@
             //     // camera.lookAt(new THREE.Vector3(0, camera.position.y + 1.5, 0));
             //     camera.lookAt(lookAt);
             // }
-            controls.update();
 
-            if (isCompleted && cameraNotMoved) {
-                gsap.to(camera.position, {
+            if (isCompleted && !cameraMoved) {
+                cameraMoved = true;
+                // controls.target = new THREE.Vector3(0, 0, 0);
+                gsap.to(controls.target, {
+                    x: 0,
+                    y: lastStalkHeight * 1.5 * 0.5,
+                    z: 0,
                     duration: 2,
-                    x: 20,
-                    y: lastStalkHeight * 0.5 * 1.5,
-                    z: 20,
-                    ease: "power2.inOut",
-                    onUpdate: () => {
-                        // controls.target(0, camera.position.y, 0);
-                        controls.target = new THREE.Vector3(0, camera.position.y, 0);
-                    },
-                    onComplete: () => {
-                        cameraNotMoved = false;
-                    },
+                    ease: "power2.out",
                 });
             }
+            controls.update();
 
             renderer.render(scene, camera);
             lastTime = currentTime;

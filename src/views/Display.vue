@@ -38,6 +38,7 @@
     import { initializeApp } from "firebase/app";
     import { getStorage, ref as storageRef, getDownloadURL } from "firebase/storage";
     import { getFirestore, collection, query, where, getDocs } from "firebase/firestore";
+    import { cameraNear } from "three/webgpu";
 
     const props = defineProps({
         id: {
@@ -65,7 +66,8 @@
 
         // Camera setup
         camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(8, 3.5, 0);
+        // camera.position.set(8, 3.5, 0);
+        camera.position.set(20, 0, 20);
 
         // Renderer setup
         renderer = new THREE.WebGLRenderer({
@@ -89,7 +91,7 @@
         controls.enableDamping = true;
 
         // Lighting
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.125);
         scene.add(ambientLight);
 
         const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
