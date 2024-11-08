@@ -1,18 +1,18 @@
 <template>
-    <div class="min-h-screen bg-gray-100 p-4">
-        <div class="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
-            <h2 class="text-2xl font-bold mb-4">Music Control (Room: {{ id }})</h2>
+    <div class="min-h-screen bg-gray-900 p-4">
+        <div class="max-w-md mx-auto bg-gray-800 rounded-lg shadow-md p-6">
+            <h2 class="text-2xl font-bold mb-4 text-white">Music Control (Room: {{ id }})</h2>
 
             <!-- Connection Status -->
             <div class="mb-4 space-y-2">
-                <div class="p-3 bg-gray-50 rounded text-sm">
+                <div class="p-3 bg-gray-700 rounded text-sm text-white">
                     <p>
                         Connection Status:
                         <span
                             :class="{
-                                'text-green-600': connectionStatus === 'Connected',
-                                'text-red-600': connectionStatus === 'Disconnected',
-                                'text-yellow-600': connectionStatus === 'Connecting',
+                                'text-green-400': connectionStatus === 'Connected',
+                                'text-red-400': connectionStatus === 'Disconnected',
+                                'text-yellow-400': connectionStatus === 'Connecting',
                             }"
                             >{{ connectionStatus }}</span
                         >
@@ -23,7 +23,7 @@
 
                 <div
                     v-if="error"
-                    class="p-3 bg-red-50 text-red-700 rounded">
+                    class="p-3 bg-red-900 text-red-300 rounded">
                     {{ error }}
                 </div>
 
@@ -44,7 +44,7 @@
                     <div class="relative">
                         <label
                             for="search"
-                            class="block text-sm font-medium text-gray-700 mb-1">
+                            class="block text-sm font-medium text-gray-300 mb-1">
                             Search Songs
                         </label>
                         <input
@@ -53,57 +53,38 @@
                             @input="debouncedSearch"
                             type="text"
                             placeholder="Search songs on Spotify..."
-                            class="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500" />
+                            class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500" />
 
                         <!-- Search Results Dropdown -->
                         <div
                             v-if="searchResults.length > 0"
-                            class="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                            class="absolute z-10 w-full mt-1 bg-gray-700 border border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
                             <div
                                 v-for="track in searchResults"
                                 :key="track.id"
                                 @click="selectTrack(track)"
-                                class="p-2 hover:bg-gray-100 cursor-pointer flex items-center space-x-2">
+                                class="p-2 hover:bg-gray-600 cursor-pointer flex items-center space-x-2">
                                 <img
                                     :src="track.album.images[2]?.url"
                                     class="w-10 h-10 rounded"
                                     alt="Album art" />
                                 <div class="flex-1">
-                                    <div class="font-medium">{{ track.name }}</div>
-                                    <div class="text-sm text-gray-600">{{ track.artists[0].name }}</div>
+                                    <div class="font-medium text-white">{{ track.name }}</div>
+                                    <div class="text-sm text-gray-400">{{ track.artists[0].name }}</div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- File Upload Button -->
-                <!--
-                <div class="start-hide">
-                    <input
-                        type="file"
-                        ref="fileInput"
-                        @change="handleFileUpload"
-                        accept=".mp3"
-                        multiple
-                        class="hidden" />
-                    <button
-                        @click="triggerFileUpload"
-                        :disabled="selectedSongs.length >= 5"
-                        class="w-full bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 transition-colors disabled:bg-gray-300">
-                        Upload Files (MP3 only, max 5)
-                    </button>
-                </div>
-                -->
-
                 <!-- Selected Songs -->
                 <div v-if="selectedSongs.length > 0">
-                    <h3 class="text-lg font-semibold mb-2">Selected Songs ({{ selectedSongs.length }}/5)</h3>
+                    <h3 class="text-lg font-semibold mb-2 text-white">Selected Songs ({{ selectedSongs.length }}/5)</h3>
                     <div class="space-y-2">
                         <div
                             v-for="song in selectedSongs"
                             :key="song.id"
-                            class="flex flex-col p-3 bg-gray-50 rounded border">
+                            class="flex flex-col p-3 bg-gray-700 rounded border border-gray-600">
                             <div class="flex items-center justify-between mb-2">
                                 <div class="flex-1">
                                     <!-- Song Name Input -->
@@ -111,17 +92,17 @@
                                         v-model="song.name"
                                         @input="debouncedGetTempo(song)"
                                         type="text"
-                                        class="w-full p-2 border rounded-md mb-2 start-disable"
+                                        class="w-full p-2 bg-gray-600 border border-gray-500 rounded-md mb-2 text-white start-disable"
                                         placeholder="Song name" />
                                     <!-- Tempo Input -->
                                     <div class="flex items-center space-x-2">
-                                        <label class="text-sm text-gray-600">Tempo:</label>
+                                        <label class="text-sm text-gray-300">Tempo:</label>
                                         <input
                                             v-model.number="song.tempo"
                                             type="number"
                                             min="1"
                                             max="300"
-                                            class="w-20 p-2 border rounded-md start-disable"
+                                            class="w-20 p-2 bg-gray-600 border border-gray-500 rounded-md text-white start-disable"
                                             placeholder="100" />
                                     </div>
                                 </div>
@@ -137,18 +118,18 @@
                                 v-if="selectedSongs.length > 1"
                                 class="mt-2 start-hide">
                                 <div>
-                                    <label class="text-sm text-gray-600">Distribution: </label>
+                                    <label class="text-sm text-gray-300">Distribution: </label>
                                     <input
                                         type="number"
-                                        class="text-sm text-gray-600 text-center"
+                                        class="text-sm bg-gray-600 text-white text-center border border-gray-500 rounded"
                                         v-model.number="songDistributions[song.id]"
                                         min="0"
                                         max="100"
                                         step="1"
                                         @input="validateDistribution" />
-                                    <label class="text-sm text-gray-600"> %</label>
+                                    <label class="text-sm text-gray-300"> %</label>
                                 </div>
-                                <label class="text-sm text-gray-600">
+                                <label class="text-sm text-gray-300">
                                     Total Duration:
                                     {{ Math.floor((songDistributions[song.id] * growthTime) / 100) }}s {{ (((songDistributions[song.id] * growthTime) % 100) * 10).toFixed(0) }}ms
                                 </label>
@@ -159,7 +140,7 @@
                                     min="0"
                                     max="100"
                                     step="1"
-                                    class="w-full" />
+                                    class="w-full bg-gray-600" />
                             </div>
                         </div>
                     </div>
@@ -167,17 +148,17 @@
                     <div
                         v-if="selectedSongs.length > 1"
                         class="mt-2 text-sm start-hide"
-                        :class="{ 'text-red-500': !isDistributionValid, 'text-green-500': isDistributionValid }">
+                        :class="{ 'text-red-400': !isDistributionValid, 'text-green-400': isDistributionValid }">
                         Total Distribution: {{ totalDistribution }}% (Must equal 100%)
                     </div>
                 </div>
 
                 <!-- Growth Time Selection -->
                 <div class="mt-4 start-hide">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Select Plant Growth Time</label>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Select Plant Growth Time</label>
                     <select
                         v-model="growthTime"
-                        class="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500">
+                        class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-green-500">
                         <option value="120">2 minutes</option>
                         <option value="150">2.5 minutes</option>
                         <option value="180">3 minutes</option>
@@ -190,7 +171,7 @@
                     <button
                         @click="startGrowth"
                         :disabled="!canStart"
-                        class="w-full py-3 bg-green-500 text-white rounded-lg font-semibold disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-green-600 transition-colors">
+                        class="w-full py-3 bg-green-500 text-white rounded-lg font-semibold disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed hover:bg-green-600 transition-colors">
                         Start Plant Growth
                     </button>
                 </div>
@@ -198,7 +179,7 @@
                 <!-- Playback Controls -->
                 <div
                     v-if="selectedSongs.length > 0"
-                    class="mt-8 bg-gray-800 rounded-lg p-4">
+                    class="mt-8 bg-gray-700 rounded-lg p-4">
                     <h3 class="text-lg font-semibold text-white mb-4">Playback Controls</h3>
                     <!-- Controls -->
                     <div class="flex flex-col space-y-4">

@@ -1281,7 +1281,7 @@
     }
 
     // Music emitter animation properties
-    const musicEmitterRadius = 7.5;
+    const musicEmitterRadius = 6.5;
     let musicEmitterAngle = 0;
     let emitterInfluence = 0.5;
     let musicEmitter = null;
@@ -1316,7 +1316,7 @@
 
     const initThreeJs = () => {
         scene = new THREE.Scene();
-        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
         renderer = new THREE.WebGLRenderer({ canvas: canvas.value, antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setClearColor(0x000000, 0); // Set clear color to transparent
@@ -1463,7 +1463,7 @@
 
         // camera setup
         const cameraTarget = new THREE.Vector3(0, 0, 0);
-        let currentRadius = 8; // Start with 15 units radius
+        let currentRadius = 9; // Start with 15 units radius
 
         // Set initial camera position
         camera.position.x = currentRadius;
@@ -1500,7 +1500,7 @@
             );
 
             gsap.to(musicEmitter.position, {
-                y: nextHeight - 0.5,
+                y: nextHeight + 0.5,
                 duration: 1,
                 ease: "power2.inOut",
             });
@@ -1593,7 +1593,7 @@
             (gltf) => {
                 gltf.scene.traverse((child) => {
                     if (child.isMesh && !stalkMesh) {
-                        console.log("Found stalk geometry:", child.geometry);
+                        // console.log("Found stalk geometry:", child.geometry);
                         stalkMesh = child.clone();
                         stalkMesh.scale.set(1, 1, 1);
                         isStalkLoaded = true;
@@ -1606,11 +1606,12 @@
             },
         );
 
-        loader.load("../assets/roots.glb", (gltf) => {
+        loader.load("../assets/roots_c1.glb", (gltf) => {
             gltf.scene.traverse((child) => {
                 if (child.isMesh && !rootMesh) {
                     console.log("Found root geometry:", child.geometry);
                     rootMesh = child.clone();
+                    // rootMesh.geometry.rotateY(Math.PI / 2);
                     rootMesh.scale.set(1, 1, 1);
                     isRootLoaded = true;
                 }
@@ -1728,7 +1729,7 @@
         musicEmitter = new THREE.Group();
 
         // Create outer sphere
-        const outerSphereGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+        const outerSphereGeometry = new THREE.SphereGeometry(0.05, 8, 8);
         const outerSphereMaterial = new THREE.MeshBasicMaterial({
             color: 0xffffff,
             transparent: true,
@@ -1738,7 +1739,7 @@
         const outerSphere = new THREE.Mesh(outerSphereGeometry, outerSphereMaterial);
 
         // Create inner sphere
-        const innerSphereGeometry = new THREE.SphereGeometry(0.1, 32, 32);
+        const innerSphereGeometry = new THREE.SphereGeometry(0.05, 32, 32);
         const innerSphereMaterial = new THREE.MeshBasicMaterial({
             color: 0xffffff,
             transparent: true,
@@ -1901,7 +1902,7 @@
             return {
                 position: position,
                 rotation: quaternion,
-                scale: new THREE.Vector3(1, distance * growthProgress, 1),
+                scale: new THREE.Vector3(1.5, distance * growthProgress, 1.5),
             };
         }
 
@@ -1919,7 +1920,7 @@
             return {
                 position: position,
                 rotation: quaternion,
-                scale: new THREE.Vector3(1, distance * growthProgress, 1),
+                scale: new THREE.Vector3(1.5, distance * growthProgress, 1.5),
             };
         }
 
@@ -1979,7 +1980,8 @@
             quaternion.multiply(alternatingRotation);
 
             // Apply scale
-            const scale = new THREE.Vector3(growthProgress, growthProgress, growthProgress);
+            const randomScaleFactor = 0.5 + Math.random() * 0.3;
+            const scale = new THREE.Vector3(growthProgress * randomScaleFactor, growthProgress * randomScaleFactor, growthProgress * randomScaleFactor);
 
             return {
                 position: position,
@@ -2032,7 +2034,7 @@
             switch (type) {
                 case "leaf": {
                     // Use the parent's direction vector to determine leaf position
-                    const growthDistance = 0.5; // Distance from parent to leaf tip
+                    const growthDistance = 0.4 + Math.random() * 0.2; // Distance from parent to leaf tip
 
                     // Calculate target position along the growth direction
                     targetX = parentNode.x + parentNode.directionVector.x * growthDistance;
@@ -2054,7 +2056,7 @@
 
                     const blendedAngle = randomAngle * (1 - emitterInfluence) + emitterAngle * emitterInfluence + variance;
 
-                    targetY = parentNode.y - 1;
+                    targetY = parentNode.y - 1.5;
                     targetX = parentNode.x + Math.cos(blendedAngle) * X_VARIANCE;
                     targetZ = parentNode.z + Math.sin(blendedAngle) * Z_VARIANCE;
                     break;
@@ -2089,7 +2091,7 @@
                         const startAngle = heightRotation * (Math.PI / 180);
                         const baseAngle = branchIndex * anglePerBranch * (Math.PI / 180) + startAngle;
 
-                        const baseRadius = 1.0 + 0.5;
+                        const baseRadius = 1.5;
                         const heightScale = 0.95;
                         const radius = Math.pow(heightScale, parentNode.height) * baseRadius;
 
@@ -2111,8 +2113,8 @@
 
                                 const blendedAngle = currentAngle * (1 - emitterInfluence) + emitterAngle * emitterInfluence + variance;
 
-                                const baseLength = 1.0;
-                                const heightScale = 0.95;
+                                const baseLength = 2.25;
+                                const heightScale = 0.85;
                                 const growthLength = Math.pow(heightScale, stalkParent.height) * baseLength;
 
                                 targetX = parentNode.x + Math.cos(blendedAngle) * growthLength;
@@ -2387,7 +2389,6 @@
         function addNode(x, y, z, type, parent = null, targetPos = null) {
             const node = new Node(x, y, z, type, parent);
             nodes[type].push(node);
-
             if (parent) {
                 parent.addChild(node);
                 if (type === "leaf") {
@@ -2396,21 +2397,22 @@
                 node.parentPos = new THREE.Vector3(parent.x, parent.y, parent.z);
                 node.directionVector = new THREE.Vector3(targetPos.x - parent.x, targetPos.y - parent.y, targetPos.z - parent.z).normalize();
             }
-
             if (targetPos) {
                 node.targetX = targetPos.x;
                 node.targetY = targetPos.y;
                 node.targetZ = targetPos.z;
             }
 
-            // Get the current dominant note, default to 'C' if no notes detected
-            const currentNote = detectedNotes.value.length > 0 ? detectedNotes.value[0].name : "C4";
+            // Calculate median note
+            let currentNote = "C4";
+            if (detectedNotes.value.length > 0) {
+                const sortedNotes = [...detectedNotes.value].sort((a, b) => a.midi - b.midi);
+                const midIndex = Math.floor(sortedNotes.length / 2);
+                currentNote = sortedNotes[midIndex].name;
+            }
 
             let nodeMesh;
             if (type === "leaf") {
-                // Use getNoteMaterial for leaf material
-                // let leafMaterial = getNoteMaterial(currentNote, "leaf").clone();
-                // nodeMesh = new THREE.Mesh(leafGeometry, leafMaterial);
                 nodeMesh = getNoteMesh(currentNote, "leaf").clone();
                 nodeMesh.castShadow = true;
                 nodeMesh.receiveShadow = true;
@@ -2421,9 +2423,7 @@
                 nodeMesh.position.copy(transform.position);
                 nodeMesh.quaternion.copy(transform.rotation);
             } else {
-                // For non-leaf nodes, use regular geometry but with note-based material
-                // nodeMesh = new THREE.Mesh(nodeGeometry, getNoteMaterial(currentNote, type).clone());
-                nodeMesh = new THREE.Mesh(nodeGeometry, new THREE.MeshStandardMaterial({ color: 0x000000 }));
+                nodeMesh = new THREE.Mesh(nodeGeometry, new THREE.MeshStandardMaterial({ color: nodeColors[type] }));
             }
 
             nodeMesh.position.set(x, y, z);
@@ -2432,8 +2432,6 @@
 
             if (parent && type !== "leaf") {
                 if (type === "stalk" && isStalkLoaded) {
-                    // let stalkMaterial = getNoteMaterial(currentNote, "stalk").clone();
-                    // const stalkMesh = new THREE.Mesh(stalkGeometry, stalkMaterial);
                     const stalkMesh = getNoteMesh(currentNote, "stalk").clone();
                     const transform = calculateStalkTransform(node.parentPos, { x, y, z }, 0);
                     stalkMesh.position.copy(transform.position);
@@ -2445,8 +2443,6 @@
                     node.connectionMesh = stalkMesh;
                     node.connectionLine = null;
                 } else if (type === "branch" && isBranchLoaded) {
-                    // let branchMaterial = getNoteMaterial(currentNote, "branch").clone();
-                    // const branchMesh = new THREE.Mesh(branchGeometry, branchMaterial);
                     const branchMesh = getNoteMesh(currentNote, "branch").clone();
                     const transform = calculateBranchTransform(node.parentPos, { x, y, z }, 0);
                     branchMesh.position.copy(transform.position);
@@ -2460,7 +2456,6 @@
 
                     let depth = node.depth;
                     if (depth === MAX_BRANCH_LENGTH - 1) {
-                        // const flowerMesh = new THREE.Mesh(flowerGeometry, flowerMaterial);
                         const flowerMesh = getNoteMesh(currentNote, "flower").clone();
                         const transform = calculateFlowerTransform(node);
                         flowerMesh.position.copy(transform.position);
@@ -2472,8 +2467,6 @@
                         nodeObjects.add(flowerMesh);
                     }
                 } else if (type === "root" && isRootLoaded) {
-                    // let rootMaterial = getNoteMaterial(currentNote, "root").clone();
-                    // const rootMesh = new THREE.Mesh(rootGeometry, rootMaterial);
                     const rootMesh = getNoteMesh(currentNote, "root").clone();
                     const transform = calculateRootTransform(node.parentPos, { x, y, z }, 0);
                     rootMesh.position.copy(transform.position);
@@ -2631,31 +2624,31 @@
                 // If growth is complete, prepare for next node
                 if (growthProgress >= 1) {
                     // Ensure final position is set
-                    if (currentNode.type === "leaf") {
-                        currentNode.mesh.scale.set(currentNode.targetScale, currentNode.targetScale, currentNode.targetScale);
-                    } else {
-                        currentNode.x = currentNode.targetX;
-                        currentNode.y = currentNode.targetY;
-                        currentNode.z = currentNode.targetZ;
-                        currentNode.mesh.position.set(currentNode.x, currentNode.y, currentNode.z);
+                    // if (currentNode.type === "leaf") {
+                    //     currentNode.mesh.scale.set(currentNode.targetScale, currentNode.targetScale, currentNode.targetScale);
+                    // } else {
+                    //     currentNode.x = currentNode.targetX;
+                    //     currentNode.y = currentNode.targetY;
+                    //     currentNode.z = currentNode.targetZ;
+                    //     currentNode.mesh.position.set(currentNode.x, currentNode.y, currentNode.z);
 
-                        if (currentNode.connectionMesh && currentNode.parentPos) {
-                            let finalTransform;
-                            if (currentNode.type === "branch") {
-                                finalTransform = calculateBranchTransform(currentNode.parentPos, currentNode, 1);
-                            } else if (currentNode.type === "stalk") {
-                                finalTransform = calculateStalkTransform(currentNode.parentPos, currentNode, 1);
-                            } else if (currentNode.type === "root") {
-                                finalTransform = calculateRootTransform(currentNode.parentPos, currentNode, 1);
-                            }
+                    //     if (currentNode.connectionMesh && currentNode.parentPos) {
+                    //         let finalTransform;
+                    //         if (currentNode.type === "branch") {
+                    //             finalTransform = calculateBranchTransform(currentNode.parentPos, currentNode, 1);
+                    //         } else if (currentNode.type === "stalk") {
+                    //             finalTransform = calculateStalkTransform(currentNode.parentPos, currentNode, 1);
+                    //         } else if (currentNode.type === "root") {
+                    //             finalTransform = calculateRootTransform(currentNode.parentPos, currentNode, 1);
+                    //         }
 
-                            if (finalTransform) {
-                                currentNode.connectionMesh.position.copy(finalTransform.position);
-                                currentNode.connectionMesh.quaternion.copy(finalTransform.rotation);
-                                currentNode.connectionMesh.scale.copy(finalTransform.scale);
-                            }
-                        }
-                    }
+                    //         if (finalTransform) {
+                    //             currentNode.connectionMesh.position.copy(finalTransform.position);
+                    //             currentNode.connectionMesh.quaternion.copy(finalTransform.rotation);
+                    //             currentNode.connectionMesh.scale.copy(finalTransform.scale);
+                    //         }
+                    //     }
+                    // }
 
                     currentNode = null;
                     currentIndex++;
