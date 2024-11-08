@@ -74,7 +74,8 @@ def process_track(track_id):
             "spotify_dl",
             "-l", spotify_url,
             "-o", temp_dir,
-            "-f", "mp3"
+            "-f", "mp3",
+            "-s", "y"
         ]
         
         # Set current working directory to temp_dir

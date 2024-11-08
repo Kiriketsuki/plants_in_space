@@ -896,6 +896,7 @@
 
                 // Stop playback if we've reached the end
                 if (currentTime.value >= growthTime.value) {
+                    isCompleted = true;
                     await stopPlayback();
                 }
             }, 100);
@@ -956,31 +957,6 @@
         currentAudio.value = await playAudioBuffer(fileData.audioBuffer, remainingDuration);
         audioStatus.value = "Playing";
     }
-    const getNoteMaterial = (noteName, materialType) => {
-        noteName = noteName.charAt(0).toUpperCase();
-        const noteMap = {
-            A: 0,
-            B: 1,
-            C: 2,
-            D: 3,
-            E: 4,
-            F: 5,
-            G: 6,
-        };
-
-        switch (materialType) {
-            case "branch":
-                return branchNoteMat;
-            case "stalk":
-                return stalkNoteMat;
-            case "root":
-                return rootNoteMat;
-            case "leaf":
-                return leafMaterials[noteMap[noteName]];
-            default:
-                return leafMaterials[0];
-        }
-    };
 
     const getNoteMesh = (noteName, nodeType) => {
         noteName = noteName.charAt(0).toUpperCase();
@@ -1462,18 +1438,18 @@
         };
 
         // camera setup
-        const cameraTarget = new THREE.Vector3(0, 0, 0);
-        let currentRadius = 9; // Start with 15 units radius
+        let currentRadius = 9.5; // Start with 15 units radius
 
         // Set initial camera position
-        camera.position.x = currentRadius;
+        camera.position.x = 20;
         camera.position.z = 0;
-        camera.position.y = 3.5;
-        camera.lookAt(cameraTarget);
+        camera.position.y = -3.5;
+        // controls.target(0, -3.5, 0);
+        controls.target = new THREE.Vector3(0, -3.5, 0);
 
         function animateCameraForStalk() {
             const nextRadius = currentRadius + 0.1;
-            const nextHeight = camera.position.y + 1;
+            const nextHeight = lastStalkHeight * 1.5 + 1.5;
 
             gsap.to(camera.position, {
                 y: nextHeight,
@@ -1481,7 +1457,7 @@
                 ease: "power2.inOut",
             });
 
-            gsap.to(cameraTarget, {
+            gsap.to(controls.target, {
                 y: nextHeight,
                 duration: 1,
                 ease: "power2.inOut",
@@ -1527,27 +1503,19 @@
                     ease: "power2.inOut",
                 });
 
-                gsap.to(cameraTarget, {
-                    x: parentNode.x,
-                    y: parentNode.y,
-                    z: parentNode.z,
-                    duration: MS_PER_QUARTER_BEAT / 250,
-                    ease: "power2.inOut",
-                });
-
                 currentBranchAngle = baseAngle;
                 updateMusicEmitterPosition();
             }
         }
 
         // const leafGeometry = new THREE.CircleGeometry(0.15, 32);
-        const nodeGeometry = new THREE.SphereGeometry(0.025);
+        const nodeGeometry = new THREE.SphereGeometry(0.045);
 
         const nodeColors = {
-            seed: 0x8b4513,
-            root: 0x4b2b15,
-            stalk: 0x8b4513,
-            branch: 0x228b22,
+            seed: 0x190a04,
+            root: 0x190a04,
+            stalk: 0x292e16,
+            branch: 0x787673,
             leaf: 0x2e8b57,
         };
 
@@ -1587,6 +1555,14 @@
         let isRootLoaded = false;
         let isBranchLoaded = false;
         let isFlowerLoaded = false;
+
+        loader.load("../assets/glass.glb", (gltf) => {
+            gltf.scene.traverse((child) => {
+                if (child.isMesh) {
+                    scene.add(child);
+                }
+            });
+        });
 
         loader.load(
             "../assets/stalk_c1.glb",
@@ -2490,6 +2466,8 @@
             return node;
         }
 
+        let cameraNotMoved = true;
+
         const animate = (currentTime) => {
             animationFrameId = requestAnimationFrame(animate);
 
@@ -2520,14 +2498,31 @@
                 updateNotes();
             }
 
-            if (!isCompleted) {
-                camera.lookAt(cameraTarget);
-            } else {
-                // if (!controls.enablePan) {
-                //     controls.enablePan = true;
-                // }
-                controls.update();
+            // if (!isCompleted) {
+            //     let lookAt = new THREE.Vector3(0, camera.position.y + 1.5, 0);
+            //     console.log(lookAt);
+            //     // camera.lookAt(new THREE.Vector3(0, camera.position.y + 1.5, 0));
+            //     camera.lookAt(lookAt);
+            // }
+            controls.update();
+
+            if (isCompleted && cameraNotMoved) {
+                gsap.to(camera.position, {
+                    duration: 2,
+                    x: 20,
+                    y: lastStalkHeight * 0.5 * 1.5,
+                    z: 20,
+                    ease: "power2.inOut",
+                    onUpdate: () => {
+                        // controls.target(0, camera.position.y, 0);
+                        controls.target = new THREE.Vector3(0, camera.position.y, 0);
+                    },
+                    onComplete: () => {
+                        cameraNotMoved = false;
+                    },
+                });
             }
+
             renderer.render(scene, camera);
             lastTime = currentTime;
         };
@@ -2658,70 +2653,6 @@
         animate(0);
     };
 
-    function saveArrayBuffer(buffer, filename) {
-        const blob = new Blob([buffer], { type: "application/octet-stream" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = filename || "scene.glb";
-        link.click();
-        URL.revokeObjectURL(url);
-    }
-
-    function ensureTRSCompatible(object) {
-        object.traverse((node) => {
-            if (node.isObject3D) {
-                // Decompose the current matrix
-                const position = new THREE.Vector3();
-                const quaternion = new THREE.Quaternion();
-                const scale = new THREE.Vector3();
-
-                // Get the world matrix
-                const matrix = node.matrix.clone();
-
-                // Try to decompose
-                if (!matrix.decompose(position, quaternion, scale)) {
-                    // If decomposition fails, reset to identity transformation
-                    node.position.set(0, 0, 0);
-                    node.quaternion.identity();
-                    node.scale.set(1, 1, 1);
-                } else {
-                    // Apply decomposed transformation
-                    node.position.copy(position);
-                    node.quaternion.copy(quaternion);
-                    node.scale.copy(scale);
-                }
-
-                // Ensure matrix is not directly set
-                node.matrixAutoUpdate = true;
-                node.updateMatrix();
-            }
-        });
-    }
-
-    function optimizeMaterials(scene) {
-        const materialMap = new Map();
-
-        scene.traverse((node) => {
-            if (node.isMesh && node.material) {
-                // Create a key based on material properties
-                const key = JSON.stringify({
-                    color: node.material.color ? node.material.color.getHex() : null,
-                    type: node.material.type,
-                    transparent: node.material.transparent,
-                    opacity: node.material.opacity,
-                });
-
-                if (!materialMap.has(key)) {
-                    materialMap.set(key, node.material.clone());
-                }
-
-                // Reuse existing material
-                node.material = materialMap.get(key);
-            }
-        });
-    }
-
     const app = initializeApp(firebaseConfig);
     const storage = getStorage(app);
     const db = getFirestore(app);
@@ -2786,32 +2717,116 @@
         }
     }
 
-    // Modified save function
-    async function savePlantToCloud(scene, fileName) {
-        if (!scene) {
-            console.error("Scene not initialized");
-            return;
-        }
+    // Material handling utilities
+    function cloneMaterialForExport(material) {
+        if (!material) return null;
 
+        const clonedMaterial = material.clone();
+
+        // Preserve essential material properties
+        const propertiesToPreserve = ["color", "map", "normalMap", "roughnessMap", "metalnessMap", "emissiveMap", "aoMap", "transparent", "opacity", "roughness", "metalness", "side", "envMapIntensity"];
+
+        propertiesToPreserve.forEach((prop) => {
+            if (material[prop] !== undefined) {
+                clonedMaterial[prop] = material[prop];
+            }
+        });
+
+        // Ensure material type is preserved
+        clonedMaterial.type = material.type;
+
+        return clonedMaterial;
+    }
+
+    function createMaterialMap(scene) {
+        const materialMap = new Map();
+        const materialCache = new WeakMap();
+
+        scene.traverse((node) => {
+            if (node.isMesh && node.material) {
+                // Handle single material
+                if (!Array.isArray(node.material)) {
+                    if (!materialCache.has(node.material)) {
+                        const clonedMaterial = cloneMaterialForExport(node.material);
+                        materialCache.set(node.material, clonedMaterial);
+                    }
+                    node.material = materialCache.get(node.material);
+                }
+                // Handle material array
+                else {
+                    node.material = node.material.map((mat) => {
+                        if (!materialCache.has(mat)) {
+                            const clonedMaterial = cloneMaterialForExport(mat);
+                            materialCache.set(mat, clonedMaterial);
+                        }
+                        return materialCache.get(mat);
+                    });
+                }
+            }
+        });
+
+        return materialMap;
+    }
+
+    // Enhanced export preparation
+    function prepareSceneForExport(scene) {
         const exportScene = scene.clone(true);
 
-        // Remove UI elements and helpers
+        // Remove unnecessary elements
         exportScene.traverse((object) => {
             if (object.userData.isUI || object.isHelper || (object.type === "Line" && object.userData.isHelper)) {
                 object.removeFromParent();
             }
         });
 
-        ensureTRSCompatible(exportScene);
-        optimizeMaterials(exportScene);
+        // Handle materials
+        createMaterialMap(exportScene);
 
-        const options = {
+        // Ensure TRS compatibility
+        exportScene.traverse((node) => {
+            if (node.isObject3D) {
+                const position = new THREE.Vector3();
+                const quaternion = new THREE.Quaternion();
+                const scale = new THREE.Vector3();
+
+                // Get world matrix and decompose
+                const matrix = node.matrix.clone();
+                if (matrix.decompose(position, quaternion, scale)) {
+                    node.position.copy(position);
+                    node.quaternion.copy(quaternion);
+                    node.scale.copy(scale);
+                } else {
+                    // Reset to identity if decomposition fails
+                    node.position.set(0, 0, 0);
+                    node.quaternion.identity();
+                    node.scale.set(1, 1, 1);
+                }
+
+                node.matrixAutoUpdate = true;
+                node.updateMatrix();
+            }
+        });
+
+        return exportScene;
+    }
+
+    // Enhanced save function
+    async function savePlantToCloud(scene, fileName) {
+        if (!scene) {
+            throw new Error("Scene not initialized");
+        }
+
+        const exportScene = prepareSceneForExport(scene);
+
+        const exportOptions = {
             binary: true,
             maxTextureSize: 4096,
             animations: [],
-            includeCustomExtensions: false,
+            includeCustomExtensions: true,
             onlyVisible: true,
             trs: true,
+            embedImages: true,
+            forcePowerOfTwoTextures: true,
         };
 
         const exporter = new GLTFExporter();
@@ -2829,7 +2844,11 @@
                                 object.geometry.dispose();
                             }
                             if (object.material) {
-                                object.material.dispose();
+                                if (Array.isArray(object.material)) {
+                                    object.material.forEach((mat) => mat.dispose());
+                                } else {
+                                    object.material.dispose();
+                                }
                             }
                         });
 
@@ -2841,11 +2860,12 @@
                 (error) => {
                     reject(error);
                 },
-                options,
+                exportOptions,
             );
         });
     }
 
+    // Usage in save click handler
     async function onSaveClick() {
         if (!scene) {
             console.error("Scene not initialized");
