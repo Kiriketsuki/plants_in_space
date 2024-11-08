@@ -121,7 +121,7 @@ const router = createRouter({
 });
 
 router.beforeEach((to, from, next) => {
-    document.title = to.meta.title ? `${to.meta.title} - Aetherial Verdancy` : "Your App Name";
+    document.title = to.meta.title ? `${to.meta.title} - Aetherial Verdancy` : "Aetherial Verdancy";
     next();
 });
 
