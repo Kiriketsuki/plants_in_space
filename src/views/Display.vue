@@ -77,8 +77,6 @@
         });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
-        // Updated from sRGBEncoding to outputColorSpace
-        renderer.outputColorSpace = THREE.SRGBColorSpace;
 
         renderer.setClearColor(0x000000, 0);
         renderer.toneMapping = THREE.NeutralToneMapping;
@@ -170,8 +168,8 @@
                                 material.shadowSide = THREE.FrontSide;
 
                                 // Ensure proper material settings
-                                if (material.map) material.map.encoding = THREE.sRGBEncoding;
-                                if (material.emissiveMap) material.emissiveMap.encoding = THREE.sRGBEncoding;
+                                // if (material.map) material.map.encoding = THREE.sRGBEncoding;
+                                // if (material.emissiveMap) material.emissiveMap.encoding = THREE.sRGBEncoding;
 
                                 // Update material to ensure changes take effect
                                 material.needsUpdate = true;
