@@ -29,7 +29,7 @@
         <div
             v-if="isLoading"
             class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-10">
-            <div class="text-white text-xl">Loading model...</div>
+            <div class="text-white text-xl">Loading models...</div>
         </div>
     </div>
 </template>
@@ -44,14 +44,7 @@
     import { firebaseConfig } from "../../secrets";
     import { initializeApp } from "firebase/app";
     import { getStorage, ref as storageRef, getDownloadURL } from "firebase/storage";
-    import { getFirestore, collection, query, where, getDocs } from "firebase/firestore";
-
-    const props = defineProps({
-        id: {
-            type: String,
-            required: true,
-        },
-    });
+    import { getFirestore, collection, query, orderBy, limit, getDocs } from "firebase/firestore";
 
     const router = useRouter();
     const canvas = ref(null);
@@ -65,6 +58,38 @@
     const app = initializeApp(firebaseConfig);
     const storage = getStorage(app);
     const db = getFirestore(app);
+
+    async function findPlantIds(numPlants = 4) {
+        try {
+            // Fetch all plants, ordered by ID in descending order
+            const q = query(collection(db, "plants"), orderBy("id", "desc"));
+            const querySnapshot = await getDocs(q);
+
+            if (querySnapshot.empty) {
+                console.error("No plants found");
+                return []; // Return an empty array if no plants are found
+            }
+
+            const plantIds = [];
+            querySnapshot.forEach((doc) => {
+                const storageLink = doc.data().storageLink;
+                const plantId = storageLink.split("/").pop().replace(".glb", ""); // Extract ID from storageLink
+                plantIds.push(plantId);
+            });
+
+            // If not enough plants, add random ones until we have numPlants
+            while (plantIds.length < numPlants) {
+                const randomIndex = Math.floor(Math.random() * plantIds.length);
+                plantIds.push(plantIds[randomIndex]);
+            }
+
+            // Only keep the desired number of plants
+            return plantIds.slice(0, numPlants);
+        } catch (err) {
+            console.error("Error finding plants:", err);
+            return []; // Return an empty array in case of an error
+        }
+    }
 
     // BG
     const bg = ref(null);
@@ -262,8 +287,7 @@
 
         // Camera setup
         camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        // camera.position.set(8, 3.5, 0);
-        camera.position.set(25, 0, 25);
+        camera.position.set(0, 0, -30);
 
         // Renderer setup
         renderer = new THREE.WebGLRenderer({
@@ -286,23 +310,6 @@
 
         const sceneLight = new THREE.AmbientLight(0xffffff, 0.125);
         scene.add(sceneLight);
-
-        // Enable shadow mapping in the renderer
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-        // Configure directional light for shadows
-        directionalLight.castShadow = true;
-        directionalLight.shadow.mapSize.width = 2048;
-        directionalLight.shadow.mapSize.height = 2048;
-        directionalLight.shadow.camera.near = 0.1;
-        directionalLight.shadow.camera.far = 100;
-        directionalLight.shadow.camera.left = -15;
-        directionalLight.shadow.camera.right = 15;
-        directionalLight.shadow.camera.top = 15;
-        directionalLight.shadow.camera.bottom = -15;
-        directionalLight.shadow.bias = -0.001;
-        directionalLight.position.set(10, 15, 10);
     }
 
     // Animation loop
@@ -329,66 +336,74 @@
     }
 
     // Load model from Firebase Storage
-    async function loadModel() {
+    async function loadModels(plantIds) {
         try {
-            isLoading.value = true;
-            const filename = `${props.id}.glb`;
-            const fileRef = storageRef(storage, `plants/${filename}`);
+            isLoading.value = true; // Assuming you have a reactive isLoading variable
 
-            try {
-                // Get download URL
-                const url = await getDownloadURL(fileRef);
+            const numPlants = plantIds.length;
+            const gridSize = Math.sqrt(numPlants);
+            const spacing = 25;
 
-                // Load the model
-                const loader = new GLTFLoader();
-                const gltf = await loader.loadAsync(url);
+            for (let i = 0; i < numPlants; i++) {
+                const filename = `${plantIds[i]}.glb`;
+                const fileRef = storageRef(storage, `plants/${filename}`);
 
-                // Enable shadows for all meshes in the model
-                gltf.scene.traverse((node) => {
-                    if (node.isMesh) {
-                        if (node.name != "Object_1001" && node.name != "Object_1001_1") {
-                            node.castShadow = true;
-                            node.receiveShadow = true;
+                try {
+                    const url = await getDownloadURL(fileRef);
+                    const loader = new GLTFLoader();
+                    const gltf = await loader.loadAsync(url);
+
+                    gltf.scene.traverse((node) => {
+                        if (node.isMesh) {
+                            if (node.material) {
+                                const materials = Array.isArray(node.material) ? node.material : [node.material];
+                                materials.forEach((material) => {
+                                    material.shadowSide = THREE.FrontSide;
+                                    material.needsUpdate = true;
+                                });
+                            }
                         }
+                    });
 
-                        // Ensure materials are configured for shadows
-                        if (node.material) {
-                            // Handle both single materials and material arrays
-                            const materials = Array.isArray(node.material) ? node.material : [node.material];
-
-                            materials.forEach((material) => {
-                                // Enable shadow properties
-                                material.shadowSide = THREE.FrontSide;
-
-                                // Ensure proper material settings
-                                // if (material.map) material.map.encoding = THREE.sRGBEncoding;
-                                // if (material.emissiveMap) material.emissiveMap.encoding = THREE.sRGBEncoding;
-
-                                // Update material to ensure changes take effect
-                                material.needsUpdate = true;
-                            });
-                        }
+                    let x, z;
+                    if (gridSize % 2 === 0) {
+                        // Even grid size
+                        x = ((i % gridSize) - gridSize / 2 + 0.5) * spacing;
+                        z = (Math.floor(i / gridSize) + 1) * spacing;
+                    } else {
+                        // Odd grid size
+                        x = ((i % gridSize) - Math.floor(gridSize / 2)) * spacing;
+                        z = (Math.floor(i / gridSize) + 1) * spacing;
                     }
-                });
 
-                // Add the model to the scene
-                scene.add(gltf.scene);
-
-                // Update controls
-                controls.update();
-            } catch (error) {
-                console.error("Error loading model:", error);
-                error.value = "Plant not found";
-                setTimeout(redirectHome, 2000);
-                return;
+                    gltf.scene.position.set(x, 0, z);
+                    scene.add(gltf.scene);
+                } catch (error) {
+                    console.error("Error loading model:", error);
+                    error.value = "Plant not found";
+                    setTimeout(redirectHome, 2000);
+                }
             }
         } catch (error) {
             console.error("Error:", error);
-            error.value = "Error loading plant";
+            error.value = "Error loading plants";
             setTimeout(redirectHome, 2000);
         } finally {
             isLoading.value = false;
         }
+    }
+
+    function positionCamera(numPlants, spacing) {
+        const gridSize = Math.sqrt(numPlants);
+        const gridDiagonal = Math.sqrt(2) * gridSize * spacing;
+        const cameraDistance = gridDiagonal;
+
+        // Calculate center of the grid
+        let centerX = 0;
+        let centerZ = (gridSize / 2 + 0.5) * spacing; // Adjust for grid starting at z = spacing
+
+        camera.position.set(0, 20, cameraDistance * 1.5);
+        camera.lookAt(centerX, 0, centerZ);
     }
 
     function redirectHome() {
@@ -399,8 +414,10 @@
     onMounted(async () => {
         initScene();
         initBG();
+        let plantIds = await findPlantIds(4);
+        await loadModels(plantIds);
+        positionCamera(plantIds.length, 25);
         animate();
-        await loadModel();
 
         window.addEventListener("resize", onWindowResize);
     });

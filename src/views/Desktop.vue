@@ -1410,9 +1410,9 @@
         bg_scene.add(light_two);
         bg_scene.add(light_three);
 
-        bg_scene.add(helper_one);
-        bg_scene.add(helper_two);
-        bg_scene.add(helper_three);
+        // bg_scene.add(helper_one);
+        // bg_scene.add(helper_two);
+        // bg_scene.add(helper_three);
 
         const stars = createStars();
         bg_scene.add(stars);

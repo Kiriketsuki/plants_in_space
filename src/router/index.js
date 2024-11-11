@@ -13,6 +13,7 @@ const Mobile = () => import("../views/Mobile.vue");
 const Display = () => import("../views/Display.vue");
 const DisplayLatest = () => import("../views/DisplayLatest.vue");
 const Visual = () => import("../views/Visual.vue");
+const ForestDisplay = () => import("../views/ForestDisplay.vue");
 
 // Function to get existing IDs from storage
 async function getExistingIds() {
@@ -103,6 +104,14 @@ const routes = [
         component: Visual,
         meta: {
             title: "Visual",
+        },
+    },
+    {
+        path: "/forest",
+        name: "forest",
+        component: ForestDisplay,
+        meta: {
+            title: "Forest",
         },
     },
     {
