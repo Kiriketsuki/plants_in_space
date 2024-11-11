@@ -494,11 +494,6 @@
         { name: "G7", freq: 3135.96 },
     ];
 
-    const leafNoteMat = new THREE.MeshStandardMaterial({ color: 0x2e8b57, side: THREE.DoubleSide });
-    const branchNoteMat = new THREE.MeshStandardMaterial({ color: 0x228b22 });
-    const stalkNoteMat = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
-    const rootNoteMat = new THREE.MeshStandardMaterial({ color: 0x4b2b15 });
-
     // Computed properties
     const allFilesLoaded = computed(() => {
         return selectedSongs.value.every((song) => songFiles.value.has(song.id)) && selectedSongs.value.length > 0;
@@ -608,7 +603,10 @@
 
         socket.value.on("mobile-disconnected", () => {
             error.value = "Mobile client disconnected";
-            resetState();
+            if (!isPlaying.value) {
+                resetState();
+                window.location.reload();
+            }
         });
 
         socket.value.on("initial-state", (state) => {
@@ -918,6 +916,11 @@
 
         const song = selectedSongs.value[currentSong.value];
         currBPM.value = song.tempo || 100;
+        if (currBPM.value >= 160) {
+            currBPM.value /= 2;
+        } else if (currBPM.value <= 80) {
+            currBPM.value *= 2;
+        }
         // Immediately update timing constants
         MS_PER_BEAT = MS_PER_MINUTE / currBPM.value;
         MS_PER_QUARTER_BEAT = MS_PER_BEAT;
@@ -1133,14 +1136,14 @@
 
         gsap.to(camera.position, {
             duration: 2,
-            x: 20,
+            x: 25,
             // y: lastStalkHeight * 0.5 * 1.5,
             y: 0,
-            z: 20,
+            z: 25,
             ease: "power2.inOut",
             onComplete: () => {
                 // controls.target(0, camera.position.y, 0);
-                controls.target = new THREE.Vector3(0, camera.position.y, 0);
+                controls.target = new THREE.Vector3(0, camera.position.y - 3.5, 0);
             },
         });
 
@@ -1634,14 +1637,45 @@
         let isBranchLoaded = false;
         let isFlowerLoaded = false;
 
-        loader.load("../assets/glass.glb", (gltf) => {
-            gltf.scene.traverse((child) => {
-                if (child.isMesh) {
-                    scene.add(child);
-                }
-            });
-        });
+        loader.load(
+            "../assets/glass_1.glb",
+            (gltf) => {
+                console.log("Model loaded, beginning processing...");
 
+                const meshes = [];
+
+                // First pass - collect all meshes
+                gltf.scene.traverse((object) => {
+                    if (object.isMesh) {
+                        meshes.push(object.clone());
+                    }
+                });
+
+                meshes.forEach((mesh) => {
+                    mesh.position.set(0, 0, 0);
+                    mesh.rotation.set(-Math.PI / 2, 0, 0);
+                    mesh.receiveShadow = true;
+                    mesh.castShadow = true;
+                    scene.add(mesh);
+                });
+
+                // Clean up
+                gltf.scene.traverse((object) => {
+                    if (object.geometry) {
+                        object.geometry.dispose();
+                    }
+                    if (object.material) {
+                        object.material.dispose();
+                    }
+                });
+            },
+            (progress) => {
+                console.log("Loading progress:", (progress.loaded / progress.total) * 100 + "%");
+            },
+            (error) => {
+                console.error("Error loading GLTF:", error);
+            },
+        );
         loader.load(
             "../assets/stalk_c1.glb",
             (gltf) => {
