@@ -1294,22 +1294,52 @@
         });
 
         const starsVertices = [];
+        const cameraFOV = 60;
+        const cameraPosition = new THREE.Vector3(21, 131, 144);
+        const lookAtPoint = new THREE.Vector3(0, 0, -100);
+
+        // Calculate camera direction
+        const cameraDirection = new THREE.Vector3().subVectors(lookAtPoint, cameraPosition).normalize();
+
+        // Calculate camera right and up vectors
+        const cameraUp = new THREE.Vector3(0, 1, 0);
+        const cameraRight = new THREE.Vector3().crossVectors(cameraDirection, cameraUp).normalize();
+        const cameraUpAdjusted = new THREE.Vector3().crossVectors(cameraRight, cameraDirection).normalize();
+
+        // Gaussian random function
+        const gaussianRand = () => {
+            const theta = 2 * Math.PI * Math.random();
+            const rho = Math.sqrt(-2 * Math.log(1 - Math.random()));
+            return (rho * Math.cos(theta) + 1) / 2; // Normalize to 0-1 range
+        };
 
         // Generate stars in view frustum
-        for (let i = 0; i < 1500; i++) {
-            // Calculate spread based on camera FOV and distance
-            // At z = -500, calculate visible width/height
-            const z = -(Math.random() * 400 + 100); // Closer range: -500 to -100
+        for (let i = 0; i < 15000; i++) {
+            // Use gaussian distribution for depth, centered around lookAtPoint.z
+            const zSpread = 800; // Total depth range
+            const gaussianZ = gaussianRand();
+            const depth = (gaussianZ * 2 - 1) * zSpread; // Convert 0-1 to -zSpread to +zSpread
+            const z = lookAtPoint.z + depth;
 
-            // Calculate visible width at this z distance (using FOV)
-            const visibleHeight = 2 * Math.tan((60 * Math.PI) / 180 / 2) * Math.abs(z);
+            // Calculate visible dimensions at this depth
+            const distanceToPlane = Math.abs(cameraPosition.distanceTo(new THREE.Vector3(0, 0, z)));
+            const visibleHeight = 2 * Math.tan((cameraFOV * Math.PI) / 360) * distanceToPlane;
             const visibleWidth = visibleHeight * (window.innerWidth / window.innerHeight);
 
-            // Generate positions within visible area
-            const x = (Math.random() - 0.5) * visibleWidth;
-            const y = (Math.random() - 0.5) * visibleHeight;
+            // Use gaussian distribution for x and y as well
+            const xOffset = (gaussianRand() * 2 - 1) * visibleWidth;
+            const yOffset = (gaussianRand() * 2 - 1) * visibleHeight;
 
-            starsVertices.push(x, y, z);
+            // Apply a density falloff based on distance from center
+            const distanceFromCenter = Math.sqrt((xOffset / visibleWidth) ** 2 + (yOffset / visibleHeight) ** 2 + (depth / zSpread) ** 2);
+
+            // Skip some stars based on distance from center to create natural falloff
+            if (Math.random() < distanceFromCenter * 0.7) continue;
+
+            // Calculate actual position using camera orientation
+            const position = new THREE.Vector3().copy(lookAtPoint).add(cameraRight.clone().multiplyScalar(xOffset)).add(cameraUpAdjusted.clone().multiplyScalar(yOffset)).add(cameraDirection.clone().multiplyScalar(depth));
+
+            starsVertices.push(position.x, position.y, position.z);
         }
 
         starsGeometry.setAttribute("position", new THREE.Float32BufferAttribute(starsVertices, 3));
@@ -1319,28 +1349,20 @@
 
     const initBG = () => {
         bg_scene = new THREE.Scene();
-
-        // Create camera - positioned to look down -Z axis
-        bg_camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 3000); // Increased far plane
-        bg_camera.position.set(0, 0, -10);
+        bg_camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 3000);
+        bg_camera.position.set(21, 131, 144);
         bg_camera.lookAt(0, 0, -100);
 
-        // Create renderer
         bg_renderer = new THREE.WebGLRenderer({ antialias: true });
         bg_renderer.setSize(window.innerWidth, window.innerHeight);
         bg.value.appendChild(bg_renderer.domElement);
 
-        // Fog - reduced density to see further
         bg_scene.fog = new THREE.FogExp2(0x111111, 0.0004);
         bg_renderer.setClearColor(bg_scene.fog.color);
 
-        // loader
         let loader = new THREE.TextureLoader();
 
-        // In the init function, modify the texture loader section:
-
         loader.load("../assets/polyclouds.png", (texture) => {
-            // Improve texture filtering
             texture.minFilter = THREE.LinearFilter;
             texture.magFilter = THREE.LinearFilter;
             texture.anisotropy = bg_renderer.capabilities.getMaxAnisotropy();
@@ -1354,61 +1376,69 @@
                 emissiveIntensity: 0.5,
                 side: THREE.DoubleSide,
                 fog: true,
-                // Add alpha settings to reduce sharp edges
                 alphaTest: 0.01,
-                depthWrite: false, // Helps with transparency sorting
+                depthWrite: false,
             });
 
-            // Helper function to create a gaussian-like random number
             const gaussianRand = () => {
-                // Box-Muller transform for gaussian distribution
                 const theta = 2 * Math.PI * Math.random();
                 const rho = Math.sqrt(-2 * Math.log(1 - Math.random()));
-                return (rho * Math.cos(theta) + 1) / 2; // Normalize to 0-1 range
+                return (rho * Math.cos(theta) + 1) / 2;
             };
 
-            // Modified cloud generation
+            // Modified cloud generation to ensure parallel orientation
             for (let p = 0; p < 25; p++) {
                 let cloud = new THREE.Mesh(cloudGeo, cloudMaterial);
 
-                // Create bias towards center using gaussian distribution
                 const xSpread = 1200;
                 const ySpread = 600;
                 const zSpread = 200;
 
-                // Convert gaussian (0-1) to position with bias towards center
-                const x = (gaussianRand() * 2 - 1) * xSpread * 0.5; // Multiply by 0.5 to tighten spread
+                const x = (gaussianRand() * 2 - 1) * xSpread * 0.5;
                 const y = (gaussianRand() * 2 - 1) * ySpread * 0.5;
-                const z = -700 + gaussianRand() * zSpread; // Keep depth range similar but bias towards front
+                const z = -700 + gaussianRand() * zSpread;
 
                 cloud.position.set(x, y, z);
+
+                // Calculate the rotation to make clouds parallel to viewport
+                const viewMatrix = new THREE.Matrix4();
+                viewMatrix.lookAt(
+                    new THREE.Vector3(21, 131, 144), // bg_camera position
+                    new THREE.Vector3(0, 0, -100), // Look at point
+                    new THREE.Vector3(0, 1, 0), // Up vector
+                );
+
+                // Extract rotation from view matrix
+                const rotation = new THREE.Euler().setFromRotationMatrix(viewMatrix);
+                cloud.rotation.copy(rotation);
+
+                // Add random rotation only around Z axis (perpendicular to view)
                 cloud.rotateZ(Math.random() * Math.PI * 2);
+
                 cloudParticles.push(cloud);
                 bg_scene.add(cloud);
             }
         });
 
-        // Add ambient light to provide base illumination
         const ambientLight = new THREE.AmbientLight(0x333333, 1);
         bg_scene.add(ambientLight);
 
-        // Adjust point lights - increased intensity and brought closer to clouds
-        light_one = new THREE.PointLight(0xff0033, 15, 1000, 1);
-        light_two = new THREE.PointLight(0x0033ff, 15, 1000, 1);
-        light_three = new THREE.PointLight(0x00ff00, 15, 1000, 1);
+        light_one = new THREE.PointLight(0xe38295, 865, 1000, 1);
+        light_two = new THREE.PointLight(0x0033ff, 336, 1000, 1);
+        light_three = new THREE.PointLight(0xeac086, 951, 1000, 1);
 
-        let helper_one = new THREE.PointLightHelper(light_one, 30);
-        let helper_two = new THREE.PointLightHelper(light_two, 30);
-        let helper_three = new THREE.PointLightHelper(light_three, 30);
-
-        // Position lights between camera and clouds
-        light_one.position.set(0, 300, -300);
-        light_two.position.set(200, -300, -300);
-        light_three.position.set(-200, -300, -300);
+        // Keeping your light positions
+        light_one.position.set(-102, 180, -250);
+        light_two.position.set(200, 58, 21);
+        light_three.position.set(-213, -201, -397);
 
         bg_scene.add(light_one);
         bg_scene.add(light_two);
         bg_scene.add(light_three);
+
+        let helper_one = new THREE.PointLightHelper(light_one, 30);
+        let helper_two = new THREE.PointLightHelper(light_two, 30);
+        let helper_three = new THREE.PointLightHelper(light_three, 30);
 
         // bg_scene.add(helper_one);
         // bg_scene.add(helper_two);
@@ -1416,7 +1446,6 @@
 
         const stars = createStars();
         bg_scene.add(stars);
-
         // animate_bg();
     };
 
@@ -1425,17 +1454,17 @@
 
         // Animate lights in the XY plane (parallel to viewport)
         const time = Date.now() * 0.001;
-        light_one.position.x = Math.sin(time * 0.7) * 300;
-        light_one.position.y = Math.cos(time * 0.5) * 300;
-        light_one.position.z = -300 + Math.sin(time * 0.3) * 100;
+        // light_one.position.x = Math.sin(time * 0.7) * 300;
+        // light_one.position.y = Math.cos(time * 0.5) * 300;
+        // light_one.position.z = -300 + Math.sin(time * 0.3) * 100;
 
-        light_two.position.x = Math.cos(time * 0.3) * 300;
-        light_two.position.y = Math.sin(time * 0.5) * 300;
-        light_two.position.z = -300 + Math.cos(time * 0.4) * 100;
+        // light_two.position.x = Math.cos(time * 0.3) * 300;
+        // light_two.position.y = Math.sin(time * 0.5) * 300;
+        // light_two.position.z = -300 + Math.cos(time * 0.4) * 100;
 
-        light_three.position.x = Math.sin(time * 0.7) * 300;
-        light_three.position.y = Math.sin(time * 0.5) * 300;
-        light_three.position.z = -300 + Math.sin(time * 0.5) * 100;
+        // light_three.position.x = Math.sin(time * 0.7) * 300;
+        // light_three.position.y = Math.sin(time * 0.5) * 300;
+        // light_three.position.z = -300 + Math.sin(time * 0.5) * 100;
 
         // Animate cloud rotation
         cloudParticles.forEach((cloud, i) => {
@@ -1719,13 +1748,13 @@
         // Set initial camera position
         camera.position.x = 20;
         camera.position.z = 0;
-        camera.position.y = -3.5;
+        camera.position.y = -5.5;
         // controls.target(0, -3.5, 0);
         controls.target = new THREE.Vector3(0, -3.5, 0);
 
         function animateCameraForStalk() {
             const nextRadius = currentRadius + 0.1;
-            const nextHeight = lastStalkHeight * 1.75 + 1.5;
+            const nextHeight = lastStalkHeight * 2.0 + 1.75;
 
             gsap.to(camera.position, {
                 y: nextHeight,
@@ -1734,7 +1763,7 @@
             });
 
             gsap.to(controls.target, {
-                y: nextHeight,
+                y: nextHeight - 1.75,
                 duration: 1,
                 ease: "power2.inOut",
             });
