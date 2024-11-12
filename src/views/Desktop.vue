@@ -1584,7 +1584,6 @@
 
         // Usage:
         const waterGeometry = createCircularWaterGeometry(10, 100); // radius = 10, segments = 100
-        // const water = new THREE.Mesh(waterGeometry, waterMaterial);
         const waterMaterial = new THREE.MeshStandardMaterial({
             color: new THREE.Color("#4097e3"),
             transparent: true,
@@ -1673,6 +1672,7 @@
         };
 
         const water = new THREE.Mesh(waterGeometry, waterMaterial);
+        water.name = "water-surface";
         water.castShadow = true;
         water.receiveShadow = true;
         water.rotation.x = -Math.PI / 2;
@@ -1709,6 +1709,7 @@
         });
 
         let waterVolumeMesh = new THREE.Mesh(waterVolume, waterVolumeMaterial);
+        waterVolumeMesh.name = "water-volume";
         waterVolumeMesh.position.y = -5.01;
         scene.add(waterVolumeMesh);
 
@@ -1847,6 +1848,7 @@
 
                 meshes.forEach((mesh) => {
                     // console.log(mesh);
+                    mesh.name = "display-case";
                     mesh.position.set(0, 0, 0);
                     mesh.rotation.set(-Math.PI / 2, 0, 0);
                     mesh.receiveShadow = true;
@@ -2020,6 +2022,7 @@
             wireframe: true,
         });
         const outerSphere = new THREE.Mesh(outerSphereGeometry, outerSphereMaterial);
+        outerSphere.name = "music-emitter-outer";
 
         // Create inner sphere
         const innerSphereGeometry = new THREE.SphereGeometry(0.05, 32, 32);
@@ -2030,6 +2033,7 @@
             wireframe: true,
         });
         const innerSphere = new THREE.Mesh(innerSphereGeometry, innerSphereMaterial);
+        innerSphere.name = "music-emitter-inner";
 
         // Add both spheres to group
         musicEmitter.add(outerSphere);
@@ -3039,42 +3043,69 @@
 
     // Enhanced export preparation
     function prepareSceneForExport(scene) {
-        const exportScene = scene.clone(true);
+        // Define meshes to exclude
+        const excludeMeshNames = ["display-case", "water-surface", "water-volume", "music-emitter"];
 
-        // Remove unnecessary elements
+        const exportScene = scene.clone(true);
+        const objectsToRemove = [];
+
+        // First pass: identify objects to remove
         exportScene.traverse((object) => {
-            if (object.userData.isUI || object.isHelper || (object.type === "Line" && object.userData.isHelper)) {
-                object.removeFromParent();
+            const shouldExclude = object.userData.isUI || object.isHelper || (object.type === "Line" && object.userData.isHelper) || excludeMeshNames.includes(object.name);
+
+            if (shouldExclude) {
+                objectsToRemove.push(object);
             }
         });
 
-        // Handle materials
+        // Second pass: remove identified objects
+        objectsToRemove.forEach((object) => {
+            if (object.parent) {
+                object.parent.remove(object);
+            }
+        });
+
+        // Clean up removed objects
+        objectsToRemove.forEach((object) => {
+            if (object.geometry) {
+                object.geometry.dispose();
+            }
+            if (object.material) {
+                if (Array.isArray(object.material)) {
+                    object.material.forEach((mat) => mat.dispose());
+                } else {
+                    object.material.dispose();
+                }
+            }
+        });
+
+        // Handle materials for remaining objects
         createMaterialMap(exportScene);
 
-        // Ensure TRS compatibility
+        // Ensure TRS compatibility for remaining objects
         exportScene.traverse((node) => {
             if (node.isObject3D) {
-                const position = new THREE.Vector3();
-                const quaternion = new THREE.Quaternion();
-                const scale = new THREE.Vector3();
+                // Store current world position
+                const worldPosition = node.getWorldPosition(new THREE.Vector3());
+                const worldQuaternion = node.getWorldQuaternion(new THREE.Quaternion());
+                const worldScale = node.getWorldScale(new THREE.Vector3());
 
-                // Get world matrix and decompose
-                const matrix = node.matrix.clone();
-                if (matrix.decompose(position, quaternion, scale)) {
-                    node.position.copy(position);
-                    node.quaternion.copy(quaternion);
-                    node.scale.copy(scale);
-                } else {
-                    // Reset to identity if decomposition fails
-                    node.position.set(0, 0, 0);
-                    node.quaternion.identity();
-                    node.scale.set(1, 1, 1);
-                }
+                // Reset matrix but maintain world position
+                node.position.copy(worldPosition);
+                node.quaternion.copy(worldQuaternion);
+                node.scale.copy(worldScale);
 
-                node.matrixAutoUpdate = true;
                 node.updateMatrix();
+                node.updateMatrixWorld(true);
             }
         });
+
+        // Add some debug logging
+        console.log("Export scene preparation complete:");
+        console.log(`- Removed ${objectsToRemove.length} objects`);
+        let remainingCount = 0;
+        exportScene.traverse(() => remainingCount++);
+        console.log(`- Remaining objects: ${remainingCount}`);
 
         return exportScene;
     }

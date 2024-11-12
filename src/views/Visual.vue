@@ -7,6 +7,8 @@
 <script>
     import { ref, onMounted, onBeforeUnmount } from "vue";
     import * as THREE from "three";
+    import GUI from "lil-gui";
+    
     const createStars = () => {
         const starsGeometry = new THREE.BufferGeometry();
         const starsMaterial = new THREE.PointsMaterial({
