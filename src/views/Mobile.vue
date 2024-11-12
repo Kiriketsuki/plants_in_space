@@ -1,11 +1,11 @@
 <template>
     <div class="min-h-screen bg-back p-4">
-        <div class="max-w-md mx-auto bg-gray-800 rounded-lg shadow-md p-6">
+        <div class="max-w-md mx-auto bg-less rounded-lg shadow-md p-6">
             <h2 class="text-2xl font-bold mb-4 text-white">Music Control (Room: {{ id }})</h2>
 
             <!-- Connection Status -->
             <div class="mb-4 space-y-2">
-                <div class="p-3 bg-gray-700 rounded text-sm text-white">
+                <div class="p-3 bg-lesser rounded text-sm text-white">
                     <p>
                         Connection Status:
                         <span
@@ -53,13 +53,13 @@
                             @input="debouncedSearch"
                             type="text"
                             placeholder="Search songs on Spotify..."
-                            class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500" />
+                            class="w-full p-2 bg-lesser border border-gray-600 rounded-md text-gray-500 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500" />
 
                         <!-- Search Results Dropdown -->
                         <div
                             v-if="searchResults.length > 0"
-                            class="absolute z-10 w-full mt-1 bg-gray-700 border border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                            <div
+                            class="absolute z-10 w-full mt-1 bg-back border border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                        <div
                                 v-for="track in searchResults"
                                 :key="track.id"
                                 @click="selectTrack(track)"
@@ -84,7 +84,7 @@
                         <div
                             v-for="song in selectedSongs"
                             :key="song.id"
-                            class="flex flex-col p-3 bg-gray-700 rounded border border-gray-600">
+                            class="flex flex-col p-3 bg-lesser rounded border border-gray-600">
                             <div class="flex items-center justify-between mb-2">
                                 <div class="flex-1">
                                     <!-- Song Name Input -->
@@ -158,7 +158,7 @@
                     <label class="block text-sm font-medium text-gray-300 mb-2">Select Plant Growth Time</label>
                     <select
                         v-model="growthTime"
-                        class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-green-500">
+                        class="w-full p-2 bg-lesser border border-gray-600 rounded-md text-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500">
                         <option value="120">2 minutes</option>
                         <option value="150">2.5 minutes</option>
                         <option value="180">3 minutes</option>
@@ -171,7 +171,7 @@
                     <button
                         @click="startGrowth"
                         :disabled="!canStart"
-                        class="w-full py-3 bg-green-500 text-white rounded-lg font-semibold disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed hover:bg-green-600 transition-colors">
+                        class="w-full py-3 bg-green-500 text-white rounded-lg font-semibold disabled:bg-lesser disabled:text-gray-400 disabled:cursor-not-allowed hover:bg-green-600 transition-colors">
                         Start Plant Growth
                     </button>
                 </div>
@@ -179,7 +179,7 @@
                 <!-- Playback Controls -->
                 <div
                     v-if="selectedSongs.length > 0"
-                    class="mt-8 bg-gray-700 rounded-lg p-4">
+                    class="mt-8 bg-lesser rounded-lg p-4">
                     <h3 class="text-lg font-semibold text-white mb-4">Playback Controls</h3>
                     <!-- Controls -->
                     <div class="flex flex-col space-y-4">

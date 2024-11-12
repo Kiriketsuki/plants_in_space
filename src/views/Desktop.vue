@@ -2,7 +2,7 @@
     <div class="h-screen w-screen absolute top-0 left-0 overflow-x-hidden overflow-y-hidden bg-back p-4 main z-10">
         <!-- Connection Status -->
         <div class="absolute top-4 right-4 z-50">
-            <div class="p-3 bg-gray-800 rounded text-sm text-white space-y-1">
+            <div class="p-3 bg-less rounded text-sm text-white space-y-1">
                 <p>
                     Status:
                     <span
@@ -47,7 +47,7 @@
             <div
                 v-else
                 class="w-full max-w-4xl">
-                <div class="bg-gray-800 rounded-lg p-6 space-y-6">
+                <div class="bg-less rounded-lg p-6 space-y-6">
                     <!-- Songs List -->
                     <div>
                         <h2 class="text-2xl font-bold mb-4 text-white">Selected Songs</h2>
@@ -61,7 +61,7 @@
                                         <div
                                             v-for="track in pendingSpotifyDownloads"
                                             :key="track.spotifyId"
-                                            class="bg-gray-700 rounded-lg p-4 w-full">
+                                            class="bg-lesser rounded-lg p-4 w-full">
                                             <div class="flex w-full justify-between items-start">
                                                 <div>
                                                     <h3 class="text-white font-bold m-0 text-start">{{ track.name }}</h3>
@@ -89,7 +89,7 @@
                             <div
                                 v-for="(song, index) in selectedSongs"
                                 :key="song.id"
-                                class="bg-gray-700 rounded-lg p-4"
+                                class="bg-lesser rounded-lg p-4"
                                 :class="{ 'border-2 border-green-500': currentSong === index }">
                                 <div class="flex justify-between items-center">
                                     <div>
@@ -113,7 +113,7 @@
                     <div
                         v-if="growthActive"
                         class="space-y-4">
-                        <div class="bg-gray-700 rounded-lg p-4">
+                        <div class="bg-lesser rounded-lg p-4">
                             <h3 class="text-lg font-semibold text-white mb-2">Growth Settings</h3>
                             <p class="text-gray-300">Total Duration: {{ growthTime }} seconds</p>
                         </div>
@@ -130,7 +130,7 @@
                             <!-- Progress Bar -->
                             <div
                                 v-if="isPlaying"
-                                class="bg-gray-700 rounded-lg p-4">
+                                class="bg-lesser rounded-lg p-4">
                                 <div class="flex justify-between text-gray-300 mb-2">
                                     <span> Now Playing: {{ currentSong !== null ? selectedSongs[currentSong].name : "None" }} </span>
                                     <span>{{ formatTime(currentTime) }} / {{ formatTime(growthTime) }}</span>
@@ -360,6 +360,7 @@
         cloudMaterial,
         cloudParticles = [];
     let light_one, light_two, light_three;
+    let lights = [];
 
     // Three.js refs
     const canvas = ref(null);
@@ -1347,6 +1348,40 @@
         return starSystem;
     };
 
+    function initializeLights() {
+        console.log("Initializing lights...");
+
+        // Clear any existing lights from the scene and array
+        lights.forEach((light) => {
+            if (light && bg_scene.children.includes(light)) {
+                bg_scene.remove(light);
+            }
+        });
+
+        // Initial light configuration
+        const initialConfig = [
+            { color: 0xe38295, intensity: 865, position: { x: -102, y: 180, z: -250 } },
+            { color: 0x0033ff, intensity: 336, position: { x: 200, y: 58, z: 21 } },
+            { color: 0xeac086, intensity: 951, position: { x: -213, y: -201, z: -397 } },
+        ];
+
+        // Create new lights
+        lights = initialConfig.map((config) => {
+            const light = new THREE.PointLight(
+                config.color,
+                config.intensity,
+                1000, // distance
+                1, // decay
+            );
+            light.position.set(config.position.x, config.position.y, config.position.z);
+            bg_scene.add(light);
+            return light;
+        });
+
+        console.log("Lights initialized:", lights.length);
+        return lights;
+    }
+
     const initBG = () => {
         bg_scene = new THREE.Scene();
         bg_camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 3000);
@@ -1362,12 +1397,12 @@
 
         let loader = new THREE.TextureLoader();
 
-        loader.load("../assets/polyclouds.png", (texture) => {
+        loader.load("../assets/testclouds.png", (texture) => {
             texture.minFilter = THREE.LinearFilter;
             texture.magFilter = THREE.LinearFilter;
             texture.anisotropy = bg_renderer.capabilities.getMaxAnisotropy();
 
-            cloudGeo = new THREE.PlaneGeometry(600, 600);
+            cloudGeo = new THREE.PlaneGeometry(800, 800);
             cloudMaterial = new THREE.MeshLambertMaterial({
                 map: texture,
                 transparent: true,
@@ -1423,22 +1458,24 @@
         const ambientLight = new THREE.AmbientLight(0x333333, 1);
         bg_scene.add(ambientLight);
 
-        light_one = new THREE.PointLight(0xe38295, 865, 1000, 1);
-        light_two = new THREE.PointLight(0x0033ff, 336, 1000, 1);
-        light_three = new THREE.PointLight(0xeac086, 951, 1000, 1);
+        // light_one = new THREE.PointLight(0xe38295, 865, 1000, 1);
+        // light_two = new THREE.PointLight(0x0033ff, 336, 1000, 1);
+        // light_three = new THREE.PointLight(0xeac086, 951, 1000, 1);
 
-        // Keeping your light positions
-        light_one.position.set(-102, 180, -250);
-        light_two.position.set(200, 58, 21);
-        light_three.position.set(-213, -201, -397);
+        // // Keeping your light positions
+        // light_one.position.set(-102, 180, -250);
+        // light_two.position.set(200, 58, 21);
+        // light_three.position.set(-213, -201, -397);
 
-        bg_scene.add(light_one);
-        bg_scene.add(light_two);
-        bg_scene.add(light_three);
+        // bg_scene.add(light_one);
+        // bg_scene.add(light_two);
+        // bg_scene.add(light_three);
 
-        let helper_one = new THREE.PointLightHelper(light_one, 30);
-        let helper_two = new THREE.PointLightHelper(light_two, 30);
-        let helper_three = new THREE.PointLightHelper(light_three, 30);
+        // let helper_one = new THREE.PointLightHelper(light_one, 30);
+        // let helper_two = new THREE.PointLightHelper(light_two, 30);
+        // let helper_three = new THREE.PointLightHelper(light_three, 30);
+
+        initializeLights();
 
         // bg_scene.add(helper_one);
         // bg_scene.add(helper_two);
@@ -1495,7 +1532,7 @@
     // MAIN THREE JS
 
     // Music emitter animation properties
-    const musicEmitterRadius = 6.5;
+    const musicEmitterRadius = 8.5;
     let musicEmitterAngle = 0;
     let emitterInfluence = 0.5;
     let musicEmitter = null;
@@ -1616,7 +1653,7 @@
         const waterMaterial = new THREE.MeshStandardMaterial({
             color: new THREE.Color("#4097e3"),
             transparent: true,
-            opacity: 0.5,
+            opacity: 0.7,
             roughness: 1.0,
             metalness: 0.0,
             side: THREE.DoubleSide,
@@ -1729,7 +1766,7 @@
         const waterVolumeMaterial = new THREE.MeshPhysicalMaterial({
             color: new THREE.Color("#4097e3"),
             transparent: true,
-            opacity: 0.5,
+            opacity: 0.7,
             roughness: 0,
             metalness: 0.1,
             transmission: 0.9,
@@ -1743,7 +1780,7 @@
         scene.add(waterVolumeMesh);
 
         // camera setup
-        let currentRadius = 10; // Start with 15 units radius
+        let currentRadius = 15; // Start with 15 units radius
 
         // Set initial camera position
         camera.position.x = 20;
@@ -1754,7 +1791,7 @@
 
         function animateCameraForStalk() {
             const nextRadius = currentRadius + 0.1;
-            const nextHeight = lastStalkHeight * 2.0 + 5.75;
+            const nextHeight = lastStalkHeight * 2.0 + 3.75;
 
             gsap.to(camera.position, {
                 y: nextHeight,
@@ -1763,7 +1800,7 @@
             });
 
             gsap.to(controls.target, {
-                y: nextHeight - 5.75,
+                y: nextHeight - 2.75,
                 duration: 1,
                 ease: "power2.inOut",
             });
@@ -2151,6 +2188,8 @@
                 clicksData[slotIndex + 3] = 0;
                 window.waterShader.uniforms.clicks.value = clicksData;
             }
+
+            updateLights();
         }
 
         function updateNotes() {
@@ -2188,6 +2227,78 @@
                     activeNotes.splice(i, 1);
                 }
             }
+        }
+
+        let light_colours = [0xe38295, 0x0033ff, 0xeac086, 0x1b998b, 0x4c243b, 0x8c1c13, 0x177e89];
+        let intensities = [865, 336, 951, 432, 168, 475];
+        function updateLights() {
+            // console.log("Updating lights...");
+            // console.log("Current lights array:", lights);
+
+            const light_colours = [0xe38295, 0x0033ff, 0xeac086, 0x1b998b, 0x4c243b, 0x8c1c13, 0x177e89];
+            const intensities = [865, 336, 951, 432, 168, 475];
+
+            // First verify lights are in the scene
+            // lights.forEach((light, index) => {
+            //     // console.log(`Light ${index}:`, {
+            //     //     exists: !!light,
+            //     //     inScene: light ? bg_scene.children.includes(light) : false,
+            //     //     position: light ? light.position.toArray() : null,
+            //     // });
+            // });
+
+            // Update each light
+            lights.forEach((oldLight, index) => {
+                if (!oldLight) {
+                    // console.warn(`Light ${index} is null or undefined`);
+                    return;
+                }
+
+                try {
+                    // Create new light
+                    const newLight = new THREE.PointLight(light_colours[Math.floor(Math.random() * light_colours.length)], intensities[Math.floor(Math.random() * intensities.length)], 1000, 1);
+
+                    // Copy position
+                    newLight.position.copy(oldLight.position);
+                    // console.log(`Created new light ${index} at position:`, newLight.position.toArray());
+
+                    // Verify old light is in scene before removing
+                    if (bg_scene.children.includes(oldLight)) {
+                        bg_scene.remove(oldLight);
+                        // console.log(`Successfully removed light ${index} from scene`);
+                    } else {
+                        // console.warn(`Light ${index} not found in scene`);
+                    }
+
+                    // Add new light
+                    bg_scene.add(newLight);
+                    // console.log(`Added new light ${index} to scene`);
+
+                    // Update array reference
+                    lights[index] = newLight;
+
+                    // Animate
+                    gsap.to(newLight.position, {
+                        x: oldLight.position.x,
+                        y: oldLight.position.y,
+                        z: oldLight.position.z,
+                        duration: 1,
+                        ease: "power2.inOut",
+                    });
+
+                    gsap.to(newLight, {
+                        intensity: intensities[Math.floor(Math.random() * intensities.length)],
+                        duration: 1,
+                        ease: "power2.inOut",
+                    });
+                } catch (error) {
+                    console.error(`Error updating light ${index}:`, error);
+                }
+            });
+
+            // // Verify final state
+            // console.log("Scene children after update:", bg_scene.children.length);
+            // console.log("Updated lights array:", lights);
         }
 
         // Add this easing function
@@ -3073,7 +3184,8 @@
     // Enhanced export preparation
     function prepareSceneForExport(scene) {
         // Define meshes to exclude
-        const excludeMeshNames = ["display-case", "water-surface", "water-volume", "music-emitter"];
+        // const excludeMeshNames = ["display-case", "water-surface", "water-volume", "music-emitter-inner", "music-emitter-outer"];
+        const excludeMeshNames = ["music-emitter-inner", "music-emitter-outer"];
 
         const exportScene = scene.clone(true);
         const objectsToRemove = [];

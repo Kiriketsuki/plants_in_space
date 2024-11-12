@@ -159,12 +159,14 @@
 
                 let loader = new THREE.TextureLoader();
 
-                loader.load("../assets/polyclouds.png", (texture) => {
+                loader.load("../assets/testclouds.png", (texture) => {
+                    console.log("Loaded texture");
+                    console.log(texture);
                     texture.minFilter = THREE.LinearFilter;
                     texture.magFilter = THREE.LinearFilter;
                     texture.anisotropy = bg_renderer.capabilities.getMaxAnisotropy();
 
-                    cloudGeo = new THREE.PlaneGeometry(600, 600);
+                    cloudGeo = new THREE.PlaneGeometry(800, 800);
                     cloudMaterial = new THREE.MeshLambertMaterial({
                         map: texture,
                         transparent: true,

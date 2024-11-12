@@ -2,7 +2,7 @@
     <div class="w-screen h-screen flex flex-col items-center justify-center">
         <div class="bg w-full h-full fixed left-0 top-0 -z-2 bg-back">
             <img
-                src="../assets/mainbg.png"
+                src="../assets/testbg.png"
                 class="w-full h-full"
                 alt="" />
         </div>
@@ -17,7 +17,7 @@
                 src="../assets/flower.png"
                 alt="" />
         </div>
-        <div class="title text-white text-[10rem] z-10 font-instr flex flex-col items-center w-[52vw]">
+        <div class="title text-white text-[10rem] z-10 font-instr flex flex-col items-center">
             <div class="first flex flex-row items-start w-full">
                 <h1>Aetherial</h1>
             </div>
@@ -55,5 +55,15 @@
 
     .nav > * {
         @apply text-3xl text-white font-code uppercase;
+    }
+
+    .title {
+        width: 40vw;
+    }
+
+    @media (max-width: 1080px) {
+        .title {
+            width: 52vw;
+        }
     }
 </style>

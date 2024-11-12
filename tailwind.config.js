@@ -8,6 +8,8 @@ module.exports = {
             },
             colors: {
                 back: "#191615",
+                less: "#4c4a4b",
+                lesser: "787878",
             },
         },
     },
