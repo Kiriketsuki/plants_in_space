@@ -1743,7 +1743,7 @@
         scene.add(waterVolumeMesh);
 
         // camera setup
-        let currentRadius = 9; // Start with 15 units radius
+        let currentRadius = 10; // Start with 15 units radius
 
         // Set initial camera position
         camera.position.x = 20;
@@ -1754,7 +1754,7 @@
 
         function animateCameraForStalk() {
             const nextRadius = currentRadius + 0.1;
-            const nextHeight = lastStalkHeight * 2.0 + 1.75;
+            const nextHeight = lastStalkHeight * 2.0 + 5.75;
 
             gsap.to(camera.position, {
                 y: nextHeight,
@@ -1763,7 +1763,7 @@
             });
 
             gsap.to(controls.target, {
-                y: nextHeight - 1.75,
+                y: nextHeight - 5.75,
                 duration: 1,
                 ease: "power2.inOut",
             });
