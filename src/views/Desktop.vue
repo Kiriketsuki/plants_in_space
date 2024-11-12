@@ -123,24 +123,9 @@
                             <button
                                 @click="togglePlayback"
                                 :disabled="!allFilesLoaded"
-                                class="w-full py-3 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                                {{ isPlaying ? "Pause" : "Play" }}
+                                class="w-full py-3 text-white bg-back rounded-t-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center">
+                                <div class="hover:border-white border-b-2 border-transparent p-2 text-3xl text-white font-code uppercase">Grow</div>
                             </button>
-
-                            <!-- Progress Bar -->
-                            <div
-                                v-if="isPlaying"
-                                class="bg-lesser rounded-lg p-4">
-                                <div class="flex justify-between text-gray-300 mb-2">
-                                    <span> Now Playing: {{ currentSong !== null ? selectedSongs[currentSong].name : "None" }} </span>
-                                    <span>{{ formatTime(currentTime) }} / {{ formatTime(growthTime) }}</span>
-                                </div>
-                                <div class="w-full bg-gray-600 rounded-full h-2">
-                                    <div
-                                        class="bg-green-500 h-2 rounded-full transition-all duration-500"
-                                        :style="{ width: `${(currentTime / growthTime) * 100}%` }"></div>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -161,42 +146,46 @@
 
     <div
         v-if="isCompleted"
-        class="absolute top-[10vh] left-[10vh] z-10 space-y-4">
+        class="save absolute top-[90vh] left-[50vw] z-10 space-y-4 transform -translate-x-1/2 -translate-y-1/2 opacity-0">
         <!-- Save Button -->
         <button
             v-if="!uploadComplete"
             @click="onSaveClick"
             :disabled="isUploading"
-            class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded transition-colors duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-            <template v-if="isUploading">
-                <svg
-                    class="animate-spin h-5 w-5 text-white"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24">
-                    <circle
-                        class="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        stroke-width="4"></circle>
-                    <path
-                        class="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Saving Plant...
+            class="text-back bg-white font-semibold py-2 px-4 rounded transition-colors duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+            <template
+                v-if="isUploading"
+                class="">
+                <div class="hover:border-back border-b-2 border-transparent p-2 text-3xl text-back font-code uppercase flex items-center justify-center">
+                    <svg
+                        class="animate-spin h-5 w-5 text-white hover:border-white border-b-2 border-transparent p-2 text-3xl font-code uppercase;"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24">
+                        <circle
+                            class="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            stroke-width="4"></circle>
+                        <path
+                            class="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Saving Plant...
+                </div>
             </template>
-            <template v-else> Save Plant </template>
+            <template v-else> <div class="hover:border-back border-b-2 border-transparent p-2 text-3xl text-back font-code uppercase">Save Plant</div> </template>
         </button>
 
         <!-- View Button -->
         <button
             v-else
             @click="onViewClick"
-            class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded transition-colors duration-200">
-            View Plant
+            class="bg-white py-2 px-4 rounded flex items-center justify-center gap-2">
+            <div class="hover:border-back border-b-2 border-transparent p-2 text-3xl text-back font-code uppercase">View Plant</div>
         </button>
     </div>
 </template>
@@ -384,6 +373,10 @@
     let currentNode = null;
     let nodeObjects = [];
     let latestNodePosition = null;
+
+    let currentNote = "C4";
+    let lightColours = [0xe38295, 0x0033ff, 0xeac086, 0x1b998b, 0x4c243b, 0x8c1c13, 0x177e89];
+    let intensities = [865, 336, 951, 432, 168, 475];
 
     let leafMeshes = [];
     let stalkMesh = null;
@@ -1152,6 +1145,18 @@
             onComplete: () => {
                 // controls.target(0, camera.position.y, 0);
                 controls.target = new THREE.Vector3(0, camera.position.y - 3.5, 0);
+                let save = document.querySelector(".save");
+                gsap.fromTo(
+                    save,
+                    {
+                        opacity: 0,
+                    },
+                    {
+                        opacity: 1,
+                        duration: 1,
+                        ease: "power2.inOut",
+                    },
+                );
             },
         });
 
@@ -1532,7 +1537,7 @@
     // MAIN THREE JS
 
     // Music emitter animation properties
-    const musicEmitterRadius = 8.5;
+    const musicEmitterRadius = 9.5;
     let musicEmitterAngle = 0;
     let emitterInfluence = 0.5;
     let musicEmitter = null;
@@ -1572,7 +1577,7 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setClearColor(0x000000, 0); // Set clear color to transparent
 
-        const controls = new OrbitControls(camera, renderer.domElement);
+        controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         // controls.enablePan = false;
 
@@ -1874,10 +1879,15 @@
         scene.add(nodeObjects);
         scene.add(connectionObjects);
 
-        const MAX_ROOT_DEPTH = 5;
-        const MAX_BRANCH_LENGTH = 4;
-        const MAX_CHILDREN = 2;
-        const MAX_STALK_BRANCHES = 3;
+        // const MAX_ROOT_DEPTH = 5;
+        let MAX_ROOT_DEPTH = 4 + Math.floor(Math.random() * 2); // Randomize root depth
+        // const MAX_BRANCH_LENGTH = 4;
+        let MAX_BRANCH_LENGTH = 3 + Math.floor(Math.random() * 3); // Randomize branch length
+        // const MAX_CHILDREN = 2;
+        let MAX_CHILDREN = 2 + Math.floor(Math.random() * 2); // Randomize children count
+        // const MAX_STALK_BRANCHES = 3;
+        let MAX_STALK_BRANCHES = 2 + Math.floor(Math.random() * 3);
+        let FORK_HEIGHT = 2 + Math.floor(Math.random() * 4); // Randomize fork height
         const X_VARIANCE = 1;
         const Z_VARIANCE = 1;
 
@@ -2080,7 +2090,7 @@
         musicEmitter = new THREE.Group();
 
         // Create outer sphere
-        const outerSphereGeometry = new THREE.SphereGeometry(0.05, 8, 8);
+        const outerSphereGeometry = new THREE.SphereGeometry(0.1, 8, 8);
         const outerSphereMaterial = new THREE.MeshBasicMaterial({
             color: 0xffffff,
             transparent: true,
@@ -2091,7 +2101,7 @@
         outerSphere.name = "music-emitter-outer";
 
         // Create inner sphere
-        const innerSphereGeometry = new THREE.SphereGeometry(0.05, 32, 32);
+        const innerSphereGeometry = new THREE.SphereGeometry(0.1, 32, 32);
         const innerSphereMaterial = new THREE.MeshBasicMaterial({
             color: 0xffffff,
             transparent: true,
@@ -2149,9 +2159,22 @@
 
         function emitNote() {
             if (!noteGeometry) return;
+            let noteName = currentNote.charAt(0).toUpperCase();
+            const noteMap = {
+                A: 0,
+                B: 1,
+                C: 2,
+                D: 3,
+                E: 4,
+                F: 5,
+                G: 6,
+            };
+
+            const noteIndex = noteMap[noteName];
+            const noteColour = new THREE.Color(lightColours[noteIndex]);
 
             const noteMaterial = new THREE.MeshBasicMaterial({
-                color: 0xffffff,
+                color: noteColour,
                 transparent: true,
                 opacity: 1,
             });
@@ -2228,51 +2251,26 @@
                 }
             }
         }
-
-        let light_colours = [0xe38295, 0x0033ff, 0xeac086, 0x1b998b, 0x4c243b, 0x8c1c13, 0x177e89];
-        let intensities = [865, 336, 951, 432, 168, 475];
         function updateLights() {
-            // console.log("Updating lights...");
-            // console.log("Current lights array:", lights);
-
-            const light_colours = [0xe38295, 0x0033ff, 0xeac086, 0x1b998b, 0x4c243b, 0x8c1c13, 0x177e89];
-            const intensities = [865, 336, 951, 432, 168, 475];
-
-            // First verify lights are in the scene
-            // lights.forEach((light, index) => {
-            //     // console.log(`Light ${index}:`, {
-            //     //     exists: !!light,
-            //     //     inScene: light ? bg_scene.children.includes(light) : false,
-            //     //     position: light ? light.position.toArray() : null,
-            //     // });
-            // });
-
-            // Update each light
             lights.forEach((oldLight, index) => {
                 if (!oldLight) {
-                    // console.warn(`Light ${index} is null or undefined`);
                     return;
                 }
 
                 try {
                     // Create new light
-                    const newLight = new THREE.PointLight(light_colours[Math.floor(Math.random() * light_colours.length)], intensities[Math.floor(Math.random() * intensities.length)], 1000, 1);
+                    const newLight = new THREE.PointLight(lightColours[Math.floor(Math.random() * lightColours.length)], intensities[Math.floor(Math.random() * intensities.length)], 1000, 1);
 
                     // Copy position
                     newLight.position.copy(oldLight.position);
-                    // console.log(`Created new light ${index} at position:`, newLight.position.toArray());
 
                     // Verify old light is in scene before removing
                     if (bg_scene.children.includes(oldLight)) {
                         bg_scene.remove(oldLight);
-                        // console.log(`Successfully removed light ${index} from scene`);
-                    } else {
-                        // console.warn(`Light ${index} not found in scene`);
                     }
 
                     // Add new light
                     bg_scene.add(newLight);
-                    // console.log(`Added new light ${index} to scene`);
 
                     // Update array reference
                     lights[index] = newLight;
@@ -2295,10 +2293,6 @@
                     console.error(`Error updating light ${index}:`, error);
                 }
             });
-
-            // // Verify final state
-            // console.log("Scene children after update:", bg_scene.children.length);
-            // console.log("Updated lights array:", lights);
         }
 
         // Add this easing function
@@ -2491,7 +2485,7 @@
                 case "stalk": {
                     targetY = parentNode.y + 2.0;
 
-                    if (parentNode.height === 3) {
+                    if (parentNode.height === FORK_HEIGHT) {
                         const forkDirection = firstFork;
                         firstFork = firstFork * -1;
 
@@ -2745,7 +2739,7 @@
 
                 case "stalk": {
                     const currentStalks = nodes.stalk;
-                    const height3Stalks = currentStalks.filter((node) => node.height === 3 && countChildrenOfType(node, ["stalk"]) < 2);
+                    const height3Stalks = currentStalks.filter((node) => node.height === FORK_HEIGHT && countChildrenOfType(node, ["stalk"]) < 2);
 
                     if (height3Stalks.length > 0) {
                         return height3Stalks[0];
@@ -2831,7 +2825,7 @@
             }
 
             // Calculate median note
-            let currentNote = "C4";
+            currentNote = "C4";
             if (detectedNotes.value.length > 0) {
                 const sortedNotes = [...detectedNotes.value].sort((a, b) => a.energy - b.energy);
                 const midIndex = Math.floor(sortedNotes.length / 2);
@@ -3333,6 +3327,10 @@
 
     function onViewClick() {
         // Open display page in new tab
+        socket.value.emit("viewPlant", {
+            roomId: props.id,
+            plantId: props.id,
+        });
         window.open(`/display/${props.id}`, "_blank");
         // Redirect current page to home
         window.location.href = "/";
@@ -3380,4 +3378,8 @@
     .growth-scene {
         backdrop-filter: blur(1px);
     }
+
+    /* button {
+        @apply hover:border-white border-b-2 border-transparent p-2 text-3xl text-white font-code uppercase;
+    } */
 </style>

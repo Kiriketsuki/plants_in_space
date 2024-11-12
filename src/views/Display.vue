@@ -346,9 +346,10 @@
                 // Enable shadows for all meshes in the model
                 gltf.scene.traverse((node) => {
                     if (node.isMesh) {
-                        if (node.name != "Object_1001" && node.name != "Object_1001_1") {
-                            node.castShadow = true;
-                            node.receiveShadow = true;
+                        node.castShadow = true;
+                        node.receiveShadow = true;
+                        if (node.name.includes("display-case")) {
+                            node.castShadow = false;
                         }
 
                         // Ensure materials are configured for shadows

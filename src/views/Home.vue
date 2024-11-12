@@ -66,4 +66,8 @@
             width: 52vw;
         }
     }
+
+    button {
+        @apply hover:border-white border-b-2 border-transparent p-2 text-3xl text-white font-code uppercase;
+    }
 </style>

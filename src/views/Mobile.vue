@@ -59,7 +59,7 @@
                         <div
                             v-if="searchResults.length > 0"
                             class="absolute z-10 w-full mt-1 bg-back border border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                        <div
+                            <div
                                 v-for="track in searchResults"
                                 :key="track.id"
                                 @click="selectTrack(track)"
@@ -407,6 +407,11 @@
             if (song) {
                 song.uploaded = true;
             }
+        });
+
+        socket.on("viewPlant", ({ plantId }) => {
+            console.log("Viewing plant", plantId);
+            window.location.href = `/display/${props.id}`;
         });
 
         return socket;
@@ -994,6 +999,7 @@
 </script>
 
 <style scoped>
+
     input[type="range"] {
         @apply bg-gray-600;
         height: 4px;

@@ -347,6 +347,14 @@ io.on("connection", (socket) => {
         }
     });
 
+    socket.on("viewPlant", ({ roomId, plantId }) => {
+        console.log("Received view plant request:", { roomId, plantId });
+        const room = rooms.get(roomId);
+        if (room) {
+            io.to(roomId).emit("viewPlant", { plantId });
+        }
+    });
+
     socket.on("disconnect", () => {
         console.log(`Client disconnected: ${socket.id}`);
         pendingAssignments.delete(socket.id);
