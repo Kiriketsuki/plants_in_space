@@ -8,7 +8,7 @@
     import { ref, onMounted, onBeforeUnmount } from "vue";
     import * as THREE from "three";
     import GUI from "lil-gui";
-    
+
     const createStars = () => {
         const starsGeometry = new THREE.BufferGeometry();
         const starsMaterial = new THREE.PointsMaterial({
@@ -54,6 +54,66 @@
                 cloudMaterial,
                 cloudParticles = [];
             let light_one, light_two, light_three;
+            let gui;
+
+            const createGUI = () => {
+                gui = new GUI();
+
+                // Camera controls folder
+                const cameraFolder = gui.addFolder("Camera Position");
+                cameraFolder.add(camera.position, "x", -500, 500).name("Camera X");
+                cameraFolder.add(camera.position, "y", -500, 500).name("Camera Y");
+                cameraFolder.add(camera.position, "z", -500, 500).name("Camera Z");
+
+                // Light One controls
+                const lightOneFolder = gui.addFolder("Light One");
+                lightOneFolder.add(light_one.position, "x", -500, 500).name("Position X");
+                lightOneFolder.add(light_one.position, "y", -500, 500).name("Position Y");
+                lightOneFolder.add(light_one.position, "z", -500, 500).name("Position Z");
+                lightOneFolder.add(light_one, "intensity", 0, 1000).name("Intensity");
+                const lightOneColor = {
+                    color: "#ff0033",
+                };
+                lightOneFolder
+                    .addColor(lightOneColor, "color")
+                    .name("Color")
+                    .onChange((value) => {
+                        light_one.color.set(value);
+                    });
+
+                // Light Two controls
+                const lightTwoFolder = gui.addFolder("Light Two");
+                lightTwoFolder.add(light_two.position, "x", -500, 500).name("Position X");
+                lightTwoFolder.add(light_two.position, "y", -500, 500).name("Position Y");
+                lightTwoFolder.add(light_two.position, "z", -500, 500).name("Position Z");
+                lightTwoFolder.add(light_two, "intensity", 0, 1000).name("Intensity");
+                const lightTwoColor = {
+                    color: "#0033ff",
+                };
+                lightTwoFolder
+                    .addColor(lightTwoColor, "color")
+                    .name("Color")
+                    .onChange((value) => {
+                        light_two.color.set(value);
+                    });
+
+                // Light Three controls
+                const lightThreeFolder = gui.addFolder("Light Three");
+                lightThreeFolder.add(light_three.position, "x", -500, 500).name("Position X");
+                lightThreeFolder.add(light_three.position, "y", -500, 500).name("Position Y");
+                lightThreeFolder.add(light_three.position, "z", -500, 500).name("Position Z");
+                lightThreeFolder.add(light_three, "intensity", 0, 1000).name("Intensity");
+                const lightThreeColor = {
+                    color: "#00ff00",
+                };
+                lightThreeFolder
+                    .addColor(lightThreeColor, "color")
+                    .name("Color")
+                    .onChange((value) => {
+                        light_three.color.set(value);
+                    });
+            };
+
             const init = () => {
                 // Create scene
                 scene = new THREE.Scene();
@@ -156,6 +216,8 @@
                 scene.add(stars);
 
                 // Start animation loop
+
+                createGUI();
                 animate();
             };
 
@@ -164,17 +226,17 @@
 
                 // Animate lights in the XY plane (parallel to viewport)
                 const time = Date.now() * 0.001;
-                light_one.position.x = Math.sin(time * 0.7) * 300;
-                light_one.position.y = Math.cos(time * 0.5) * 300;
-                light_one.position.z = -300 + Math.sin(time * 0.3) * 100;
+                // light_one.position.x = Math.sin(time * 0.7) * 300;
+                // light_one.position.y = Math.cos(time * 0.5) * 300;
+                // light_one.position.z = -300 + Math.sin(time * 0.3) * 100;
 
-                light_two.position.x = Math.cos(time * 0.3) * 300;
-                light_two.position.y = Math.sin(time * 0.5) * 300;
-                light_two.position.z = -300 + Math.cos(time * 0.4) * 100;
+                // light_two.position.x = Math.cos(time * 0.3) * 300;
+                // light_two.position.y = Math.sin(time * 0.5) * 300;
+                // light_two.position.z = -300 + Math.cos(time * 0.4) * 100;
 
-                light_three.position.x = Math.sin(time * 0.7) * 300;
-                light_three.position.y = Math.sin(time * 0.5) * 300;
-                light_three.position.z = -300 + Math.sin(time * 0.5) * 100;
+                // light_three.position.x = Math.sin(time * 0.7) * 300;
+                // light_three.position.y = Math.sin(time * 0.5) * 300;
+                // light_three.position.z = -300 + Math.sin(time * 0.5) * 100;
 
                 // Animate cloud rotation
                 cloudParticles.forEach((cloud, i) => {
