@@ -1,15 +1,15 @@
 <template>
     <div
         v-if="error"
-        class="fixed inset-0 flex items-center justify-center bg-gray-900">
+        class="fixed inset-0 flex items-center justify-center bg-back">
         <div class="text-white text-xl">
             {{ error }}
         </div>
     </div>
     <div
         v-else
-        class="fixed inset-0 flex items-center justify-center bg-gray-900">
-        <div class="text-white text-xl">Loading latest plant...</div>
+        class="fixed inset-0 flex items-center justify-center bg-back">
+        <div class="text-white text-9xl capitalize font-code">Finding The Latest Plant</div>
     </div>
 </template>
 

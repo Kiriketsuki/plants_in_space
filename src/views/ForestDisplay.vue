@@ -29,7 +29,7 @@
         <div
             v-if="isLoading"
             class="fixed inset-0 flex items-center justify-center bg-back bg-opacity-50 z-10">
-            <div class="text-white text-xl">Loading models...</div>
+            <div class="text-white text-9xl capitalize font-code">{{ loadingText }}</div>
         </div>
     </div>
 </template>
@@ -45,7 +45,37 @@
     import { initializeApp } from "firebase/app";
     import { getStorage, ref as storageRef, getDownloadURL } from "firebase/storage";
     import { getFirestore, collection, query, orderBy, limit, getDocs } from "firebase/firestore";
-    import GUI from "lil-gui";
+    import gsap from "gsap";
+    import { TextPlugin } from "gsap/TextPlugin";
+
+    gsap.registerPlugin(TextPlugin);
+
+    const loadingText = ref("Loading models");
+    const loadingOpacity = ref(0);
+    let loadingInterval = null;
+
+    function createLoadingAnimation() {
+        // Initial fade in
+        gsap.to(loadingOpacity, {
+            value: 1,
+            duration: 0.5,
+            ease: "power2.out",
+        });
+
+        // Update dots with interval
+        let dots = 0;
+        loadingInterval = setInterval(() => {
+            dots = (dots + 1) % 4;
+            loadingText.value = "Loading models" + ".".repeat(dots);
+        }, 500);
+    }
+
+    function cleanupLoadingAnimation() {
+        if (loadingInterval) {
+            clearInterval(loadingInterval);
+        }
+        gsap.killTweensOf(loadingOpacity);
+    }
 
     const router = useRouter();
     const canvas = ref(null);
@@ -445,6 +475,7 @@
 
     // Lifecycle hooks
     onMounted(async () => {
+        createLoadingAnimation();
         initScene();
         initBG();
         let plantIds = await findPlantIds(4);
@@ -455,6 +486,7 @@
     });
 
     onUnmounted(() => {
+        cleanupLoadingAnimation();
         window.removeEventListener("resize", onWindowResize);
 
         // Cleanup Three.js resources
