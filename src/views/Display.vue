@@ -1,7 +1,7 @@
 <template>
     <div
         v-if="error"
-        class="fixed inset-0 flex items-center justify-center bg-gray-900">
+        class="fixed inset-0 flex items-center justify-center bg-back">
         <div class="text-white text-center">
             <p class="text-xl mb-4">{{ error }}</p>
             <button
@@ -14,7 +14,7 @@
 
     <div
         v-else
-        class="h-screen w-screen">
+        class="h-screen w-screen bg-back">
         <div
             ref="bg"
             class="h-screen w-screen fixed top-0 left-0 -z-1"></div>
@@ -28,7 +28,7 @@
 
         <div
             v-if="isLoading"
-            class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-10">
+            class="fixed inset-0 flex items-center justify-center bg-back bg-opacity-50 z-10">
             <div class="text-white text-xl">Loading model...</div>
         </div>
     </div>

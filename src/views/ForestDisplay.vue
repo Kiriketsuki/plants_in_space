@@ -14,7 +14,7 @@
 
     <div
         v-else
-        class="h-screen w-screen">
+        class="h-screen w-screen bg-back">
         <div
             ref="bg"
             class="h-screen w-screen fixed top-0 left-0 -z-1"></div>
@@ -45,6 +45,7 @@
     import { initializeApp } from "firebase/app";
     import { getStorage, ref as storageRef, getDownloadURL } from "firebase/storage";
     import { getFirestore, collection, query, orderBy, limit, getDocs } from "firebase/firestore";
+    import GUI from "lil-gui";
 
     const router = useRouter();
     const canvas = ref(null);
@@ -157,13 +158,13 @@
 
         // In the init function, modify the texture loader section:
 
-        loader.load("../assets/polyclouds.png", (texture) => {
+        loader.load("../assets/testclouds.png", (texture) => {
             // Improve texture filtering
             texture.minFilter = THREE.LinearFilter;
             texture.magFilter = THREE.LinearFilter;
             texture.anisotropy = bg_renderer.capabilities.getMaxAnisotropy();
 
-            cloudGeo = new THREE.PlaneGeometry(600, 600);
+            cloudGeo = new THREE.PlaneGeometry(800, 800);
             cloudMaterial = new THREE.MeshLambertMaterial({
                 map: texture,
                 transparent: true,
@@ -287,7 +288,7 @@
 
         // Camera setup
         camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 0, -30);
+        camera.position.set(0, 27, 71); // Updated camera position
 
         // Renderer setup
         renderer = new THREE.WebGLRenderer({
@@ -297,16 +298,42 @@
         });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         renderer.setClearColor(0x000000, 0);
 
         // Controls setup
         controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
+        controls.target.set(1, -9, 32); // Set where the camera is looking at
+        controls.addEventListener("change", () => {
+            console.log("Camera Position:", {
+                x: camera.position.x.toFixed(2),
+                y: camera.position.y.toFixed(2),
+                z: camera.position.z.toFixed(2),
+                target: {
+                    x: controls.target.x.toFixed(2),
+                    y: controls.target.y.toFixed(2),
+                    z: controls.target.z.toFixed(2),
+                },
+            });
+        });
 
         // Lighting
         const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-        directionalLight.position.set(5, 5, 5);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 2048;
+        directionalLight.shadow.mapSize.height = 2048;
+        directionalLight.shadow.camera.near = 0.1;
+        directionalLight.shadow.camera.far = 100;
+        directionalLight.shadow.camera.left = -15;
+        directionalLight.shadow.camera.right = 15;
+        directionalLight.shadow.camera.top = 15;
+        directionalLight.shadow.camera.bottom = -15;
+        directionalLight.shadow.bias = -0.001;
+        directionalLight.position.set(-0.8, 27, 100);
         scene.add(directionalLight);
+        directionalLight.target.position.set(-20, -9, 13);
 
         const sceneLight = new THREE.AmbientLight(0xffffff, 0.125);
         scene.add(sceneLight);
@@ -355,6 +382,12 @@
 
                     gltf.scene.traverse((node) => {
                         if (node.isMesh) {
+                            node.castShadow = true;
+                            node.receiveShadow = true;
+                            if (node.name.includes("display-case")) {
+                                console.log("Found display case");
+                                node.castShadow = false;
+                            }
                             if (node.material) {
                                 const materials = Array.isArray(node.material) ? node.material : [node.material];
                                 materials.forEach((material) => {
@@ -416,7 +449,6 @@
         initBG();
         let plantIds = await findPlantIds(4);
         await loadModels(plantIds);
-        positionCamera(plantIds.length, 25);
         animate();
 
         window.addEventListener("resize", onWindowResize);
