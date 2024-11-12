@@ -1,5 +1,5 @@
 <template>
-    <div class="h-screen w-screen absolute top-0 left-0 overflow-x-hidden overflow-y-hidden bg-gray-900 p-4 main z-10">
+    <div class="h-screen w-screen absolute top-0 left-0 overflow-x-hidden overflow-y-hidden bg-back p-4 main z-10">
         <!-- Connection Status -->
         <div class="absolute top-4 right-4 z-50">
             <div class="p-3 bg-gray-800 rounded text-sm text-white space-y-1">

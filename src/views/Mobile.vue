@@ -1,5 +1,5 @@
 <template>
-    <div class="min-h-screen bg-gray-900 p-4">
+    <div class="min-h-screen bg-back p-4">
         <div class="max-w-md mx-auto bg-gray-800 rounded-lg shadow-md p-6">
             <h2 class="text-2xl font-bold mb-4 text-white">Music Control (Room: {{ id }})</h2>
 
