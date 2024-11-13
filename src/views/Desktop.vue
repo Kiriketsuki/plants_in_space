@@ -826,13 +826,20 @@
     // Audio playback functions
 
     async function togglePlayback() {
+        // document.querySelector(".main").style.display = "none";
+        gsap.to(".main", {
+            opacity: 0,
+            duration: 1,
+            onComplete: () => {
+                document.querySelector(".main").style.display = "none";
+            },
+        });
         if (isPlaying.value) {
             await stopPlayback();
         } else {
             await startPlayback();
         }
 
-        document.querySelector(".main").style.display = "none";
         initThreeJs();
     }
 
