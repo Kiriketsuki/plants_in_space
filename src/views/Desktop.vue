@@ -378,7 +378,7 @@
     let lightColours = [0xe38295, 0x0033ff, 0xeac086, 0x1b998b, 0x4c243b, 0x8c1c13, 0x177e89];
     let intensities = [865, 336, 951, 432, 168, 475];
 
-    let leafMeshes = [];
+    let leafMeshes = {};
     let stalkMesh = null;
     let rootMesh = null;
     let branchMesh = null;
@@ -989,6 +989,9 @@
             case "root":
                 return rootMesh;
             case "leaf":
+                // console.log("Note name:", noteName);
+                // console.log(noteMap[noteName]);
+                // console.log(leafMeshes[noteMap[noteName]]);
                 return leafMeshes[noteMap[noteName]];
             case "flower":
                 return flowerMesh;
@@ -1824,6 +1827,7 @@
                 console.error("Error loading GLTF:", error);
             },
         );
+
         loader.load(
             "../assets/stalk_c1.glb",
             (gltf) => {
@@ -1896,7 +1900,8 @@
                 if (child.isMesh) {
                     let mesh = child.clone();
                     adjustLeafMesh(mesh);
-                    leafMeshes.push(mesh);
+                    // leafMeshes.push({ 0: mesh });
+                    leafMeshes[0] = mesh;
                 }
             });
         });
@@ -1906,7 +1911,8 @@
                 if (child.isMesh) {
                     let mesh = child.clone();
                     adjustLeafMesh(mesh);
-                    leafMeshes.push(mesh);
+                    // leafMeshes.push({ 1: mesh });
+                    leafMeshes[1] = mesh;
                 }
             });
         });
@@ -1916,7 +1922,8 @@
                 if (child.isMesh) {
                     let mesh = child.clone();
                     adjustLeafMesh(mesh);
-                    leafMeshes.push(mesh);
+                    // leafMeshes.push({ 2: mesh });
+                    leafMeshes[2] = mesh;
                 }
             });
         });
@@ -1926,7 +1933,8 @@
                 if (child.isMesh) {
                     let mesh = child.clone();
                     adjustLeafMesh(mesh);
-                    leafMeshes.push(mesh);
+                    // leafMeshes.push({ 3: mesh });
+                    leafMeshes[3] = mesh;
                 }
             });
         });
@@ -1936,7 +1944,8 @@
                 if (child.isMesh) {
                     let mesh = child.clone();
                     adjustLeafMesh(mesh);
-                    leafMeshes.push(mesh);
+                    // leafMeshes.push({ 4: mesh });
+                    leafMeshes[4] = mesh;
                 }
             });
         });
@@ -1946,7 +1955,8 @@
                 if (child.isMesh) {
                     let mesh = child.clone();
                     adjustLeafMesh(mesh);
-                    leafMeshes.push(mesh);
+                    // leafMeshes.push({ 5: mesh });
+                    leafMeshes[5] = mesh;
                 }
             });
         });
@@ -1956,7 +1966,8 @@
                 if (child.isMesh) {
                     let mesh = child.clone();
                     adjustLeafMesh(mesh);
-                    leafMeshes.push(mesh);
+                    // leafMeshes.push({ 6: mesh });
+                    leafMeshes[6] = mesh;
                 }
             });
         });
@@ -2077,9 +2088,9 @@
         // const MAX_ROOT_DEPTH = 5;
         let MAX_ROOT_DEPTH = 4 + Math.floor(Math.random() * 2); // Randomize root depth
         // const MAX_BRANCH_LENGTH = 4;
-        let MAX_BRANCH_LENGTH = 4 + Math.floor(Math.random() * 2); // Randomize branch length
-        // const MAX_CHILDREN = 2;
-        let MAX_CHILDREN = 2 + Math.floor(Math.random() * 2); // Randomize children count
+        let MAX_BRANCH_LENGTH = 3 + Math.floor(Math.random() * 2); // Randomize branch length
+        const MAX_CHILDREN = 2;
+        // let MAX_CHILDREN = 2 + Math.floor(Math.random() * 2); // Randomize children count
         // const MAX_STALK_BRANCHES = 3;
         let MAX_STALK_BRANCHES = 3 + Math.floor(Math.random() * 2);
         let FORK_HEIGHT = 2 + Math.floor(Math.random() * 3); // Randomize fork height
@@ -2165,6 +2176,8 @@
             lastPulseScale = pulseScale;
         }
 
+        const noteColours = [0x763132, 0x332b73, 0xa66f3b, 0x9e9f7d, 0x1d2516, 0x537715, 0x817b40];
+
         function emitNote() {
             if (!noteGeometry) return;
             let noteName = currentNote.charAt(0).toUpperCase();
@@ -2179,7 +2192,7 @@
             };
 
             const noteIndex = noteMap[noteName];
-            const noteColour = new THREE.Color(lightColours[noteIndex]);
+            const noteColour = new THREE.Color(noteColours[noteIndex]);
 
             const noteMaterial = new THREE.MeshBasicMaterial({
                 color: noteColour,
@@ -2220,7 +2233,7 @@
                 window.waterShader.uniforms.clicks.value = clicksData;
             }
 
-            updateLights();
+            // updateLights();
         }
 
         function updateNotes() {
