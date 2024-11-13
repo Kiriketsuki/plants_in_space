@@ -159,7 +159,7 @@
 
                 let loader = new THREE.TextureLoader();
 
-                loader.load("../assets/testclouds.png", (texture) => {
+                loader.load("../assets/clouds.png", (texture) => {
                     console.log("Loaded texture");
                     console.log(texture);
                     texture.minFilter = THREE.LinearFilter;
@@ -170,9 +170,9 @@
                     cloudMaterial = new THREE.MeshLambertMaterial({
                         map: texture,
                         transparent: true,
-                        opacity: 0.3,
+                        opacity: 0.2,
                         emissive: 0x111111,
-                        emissiveIntensity: 0.5,
+                        emissiveIntensity: 0.0,
                         side: THREE.DoubleSide,
                         fog: true,
                         alphaTest: 0.01,

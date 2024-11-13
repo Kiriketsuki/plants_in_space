@@ -164,7 +164,7 @@
 
         // In the init function, modify the texture loader section:
 
-        loader.load("../assets/polyclouds.png", (texture) => {
+        loader.load("../assets/clouds.png", (texture) => {
             // Improve texture filtering
             texture.minFilter = THREE.LinearFilter;
             texture.magFilter = THREE.LinearFilter;
@@ -179,9 +179,8 @@
                 emissiveIntensity: 0.5,
                 side: THREE.DoubleSide,
                 fog: true,
-                // Add alpha settings to reduce sharp edges
                 alphaTest: 0.01,
-                depthWrite: false, // Helps with transparency sorting
+                depthWrite: false,
             });
 
             // Helper function to create a gaussian-like random number
@@ -431,8 +430,8 @@
     // Lifecycle hooks
     onMounted(async () => {
         createLoadingAnimation();
-        initScene();
         initBG();
+        initScene();
         animate();
         await loadModel();
 

@@ -1402,7 +1402,7 @@
 
         let loader = new THREE.TextureLoader();
 
-        loader.load("../assets/testclouds.png", (texture) => {
+        loader.load("../assets/clouds.png", (texture) => {
             texture.minFilter = THREE.LinearFilter;
             texture.magFilter = THREE.LinearFilter;
             texture.anisotropy = bg_renderer.capabilities.getMaxAnisotropy();
@@ -1570,7 +1570,17 @@
         musicEmitter.position.z = Math.sin(musicEmitterAngle) * musicEmitterRadius;
     }
 
-    const initThreeJs = () => {
+    let waterVolume, waterVolumeMesh;
+    const clicksData = new Float32Array(40); // 10 clicks * 4 components
+    const loadingManager = new THREE.LoadingManager();
+    const loader = new GLTFLoader(loadingManager);
+
+    let isStalkLoaded = false;
+    let isRootLoaded = false;
+    let isBranchLoaded = false;
+    let isFlowerLoaded = false;
+
+    const prelimInit = () => {
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
         renderer = new THREE.WebGLRenderer({ canvas: canvas.value, antialias: true, alpha: true });
@@ -1665,7 +1675,6 @@
         });
 
         // Initialize clicks array for ripple effect
-        const clicksData = new Float32Array(40); // 10 clicks * 4 components
         for (let i = 0; i < 40; i += 4) {
             clicksData[i] = 0; // time
             clicksData[i + 1] = 0; // isAlive
@@ -1750,24 +1759,7 @@
         water.position.y = 0;
         scene.add(water);
 
-        const updateWater = (time) => {
-            if (window.waterShader) {
-                window.waterShader.uniforms.time.value = time / 1000;
-
-                // Update wave states
-                for (let i = 0; i < 40; i += 4) {
-                    if (clicksData[i + 1] > 0) {
-                        // if wave is alive
-                        const timeSince = time / 1000 - clicksData[i];
-                        if (timeSince > 5) {
-                            clicksData[i + 1] = 0; // deactivate wave
-                        }
-                    }
-                }
-            }
-        };
-
-        let waterVolume = new THREE.CylinderGeometry(10, 10, 10, 100, 1, true);
+        waterVolume = new THREE.CylinderGeometry(10, 10, 10, 100, 1, true);
         const waterVolumeMaterial = new THREE.MeshPhysicalMaterial({
             color: new THREE.Color("#4097e3"),
             transparent: true,
@@ -1779,134 +1771,10 @@
             side: THREE.DoubleSide,
         });
 
-        let waterVolumeMesh = new THREE.Mesh(waterVolume, waterVolumeMaterial);
+        waterVolumeMesh = new THREE.Mesh(waterVolume, waterVolumeMaterial);
         waterVolumeMesh.name = "water-volume";
         waterVolumeMesh.position.y = -5.01;
         scene.add(waterVolumeMesh);
-
-        // camera setup
-        let currentRadius = 15; // Start with 15 units radius
-
-        // Set initial camera position
-        camera.position.x = 20;
-        camera.position.z = 0;
-        camera.position.y = -5.5;
-        // controls.target(0, -3.5, 0);
-        controls.target = new THREE.Vector3(0, -3.5, 0);
-
-        function animateCameraForStalk() {
-            const nextRadius = currentRadius + 0.1;
-            const nextHeight = lastStalkHeight * 2.0 + 3.75;
-
-            gsap.to(camera.position, {
-                y: nextHeight,
-                duration: 1,
-                ease: "power2.inOut",
-            });
-
-            gsap.to(controls.target, {
-                y: nextHeight - 2.75,
-                duration: 1,
-                ease: "power2.inOut",
-            });
-
-            gsap.to(
-                { value: currentRadius },
-                {
-                    value: nextRadius,
-                    duration: 1,
-                    ease: "power2.inOut",
-                    onUpdate: function () {
-                        currentRadius = this.targets()[0].value;
-                    },
-                },
-            );
-
-            gsap.to(musicEmitter.position, {
-                y: nextHeight + 0.5,
-                duration: 1,
-                ease: "power2.inOut",
-            });
-        }
-
-        function animateCameraForBranch(parentNode) {
-            // Only adjust camera for branches directly from stalks
-            if (parentNode.type === "stalk") {
-                const branchIndex = parentNode.children.length - 1; // Get index of newest branch
-                const anglePerBranch = 360 / MAX_STALK_BRANCHES;
-                const heightRotation = parentNode.height * 30;
-                const startAngle = heightRotation * (Math.PI / 180);
-                const baseAngle = branchIndex * anglePerBranch * (Math.PI / 180) + startAngle;
-
-                // Calculate target camera position
-                const targetX = Math.cos(baseAngle) * currentRadius;
-                const targetZ = Math.sin(baseAngle) * currentRadius;
-
-                // Animate camera position
-                gsap.to(camera.position, {
-                    x: targetX,
-                    z: targetZ,
-                    duration: MS_PER_QUARTER_BEAT / 250,
-                    ease: "power2.inOut",
-                });
-
-                currentBranchAngle = baseAngle;
-                updateMusicEmitterPosition();
-            }
-        }
-
-        // const leafGeometry = new THREE.CircleGeometry(0.15, 32);
-        const nodeGeometry = new THREE.SphereGeometry(0.045);
-
-        const nodeColors = {
-            seed: 0x190a04,
-            root: 0x190a04,
-            stalk: 0x292e16,
-            branch: 0x787673,
-            leaf: 0x2e8b57,
-        };
-
-        const nodes = {
-            seed: [],
-            root: [],
-            stalk: [],
-            branch: [],
-            leaf: [],
-        };
-
-        nodeObjects = new THREE.Group();
-        const connectionObjects = new THREE.Group();
-        scene.add(nodeObjects);
-        scene.add(connectionObjects);
-
-        // const MAX_ROOT_DEPTH = 5;
-        let MAX_ROOT_DEPTH = 4 + Math.floor(Math.random() * 2); // Randomize root depth
-        // const MAX_BRANCH_LENGTH = 4;
-        let MAX_BRANCH_LENGTH = 3 + Math.floor(Math.random() * 3); // Randomize branch length
-        // const MAX_CHILDREN = 2;
-        let MAX_CHILDREN = 2 + Math.floor(Math.random() * 2); // Randomize children count
-        // const MAX_STALK_BRANCHES = 3;
-        let MAX_STALK_BRANCHES = 2 + Math.floor(Math.random() * 3);
-        let FORK_HEIGHT = 2 + Math.floor(Math.random() * 4); // Randomize fork height
-        const X_VARIANCE = 1;
-        const Z_VARIANCE = 1;
-
-        const growthConfig = {
-            25: "root",
-            10000: "leaf",
-        };
-
-        let firstFork = -1;
-        let lastUsedForkIndex = 0;
-
-        // First, create a loading manager to track when the model is ready
-        const loadingManager = new THREE.LoadingManager();
-        const loader = new GLTFLoader(loadingManager);
-
-        let isStalkLoaded = false;
-        let isRootLoaded = false;
-        let isBranchLoaded = false;
-        let isFlowerLoaded = false;
 
         loader.load(
             "../assets/glass_1.glb",
@@ -2016,7 +1884,7 @@
             mesh.material.envMapIntensity = 0.0;
         }
 
-        loader.load("../assets/leaf_c1.glb", (gltf) => {
+        loader.load("../assets/leaf_c1_red.glb", (gltf) => {
             gltf.scene.traverse((child) => {
                 if (child.isMesh) {
                     let mesh = child.clone();
@@ -2026,7 +1894,7 @@
             });
         });
 
-        loader.load("../assets/leaf_c2.glb", (gltf) => {
+        loader.load("../assets/leaf_c2_purple.glb", (gltf) => {
             gltf.scene.traverse((child) => {
                 if (child.isMesh) {
                     let mesh = child.clone();
@@ -2076,7 +1944,7 @@
             });
         });
 
-        loader.load("../assets/leaf_c7.glb", (gltf) => {
+        loader.load("../assets/leaf_c7_yellowish.glb", (gltf) => {
             gltf.scene.traverse((child) => {
                 if (child.isMesh) {
                     let mesh = child.clone();
@@ -2085,6 +1953,139 @@
                 }
             });
         });
+    };
+
+    const initThreeJs = () => {
+        const updateWater = (time) => {
+            if (window.waterShader) {
+                window.waterShader.uniforms.time.value = time / 1000;
+
+                // Update wave states
+                for (let i = 0; i < 40; i += 4) {
+                    if (clicksData[i + 1] > 0) {
+                        // if wave is alive
+                        const timeSince = time / 1000 - clicksData[i];
+                        if (timeSince > 5) {
+                            clicksData[i + 1] = 0; // deactivate wave
+                        }
+                    }
+                }
+            }
+        };
+        // camera setup
+        let currentRadius = 15; // Start with 15 units radius
+
+        // Set initial camera position
+        camera.position.x = 20;
+        camera.position.z = 0;
+        camera.position.y = -5.5;
+        // controls.target(0, -3.5, 0);
+        controls.target = new THREE.Vector3(0, -3.5, 0);
+
+        function animateCameraForStalk() {
+            const nextRadius = currentRadius + 0.1;
+            const nextHeight = lastStalkHeight * 2.0 + 3.75;
+
+            gsap.to(camera.position, {
+                y: nextHeight,
+                duration: 1,
+                ease: "power2.inOut",
+            });
+
+            gsap.to(controls.target, {
+                y: nextHeight - 2.75,
+                duration: 1,
+                ease: "power2.inOut",
+            });
+
+            gsap.to(
+                { value: currentRadius },
+                {
+                    value: nextRadius,
+                    duration: 1,
+                    ease: "power2.inOut",
+                    onUpdate: function () {
+                        currentRadius = this.targets()[0].value;
+                    },
+                },
+            );
+
+            gsap.to(musicEmitter.position, {
+                y: nextHeight + 0.5,
+                duration: 1,
+                ease: "power2.inOut",
+            });
+        }
+
+        function animateCameraForBranch(parentNode) {
+            // Only adjust camera for branches directly from stalks
+            if (parentNode.type === "stalk") {
+                const branchIndex = parentNode.children.length - 1; // Get index of newest branch
+                const anglePerBranch = 360 / MAX_STALK_BRANCHES;
+                const heightRotation = parentNode.height * 30;
+                const startAngle = heightRotation * (Math.PI / 180);
+                const baseAngle = branchIndex * anglePerBranch * (Math.PI / 180) + startAngle;
+
+                // Calculate target camera position
+                const targetX = Math.cos(baseAngle) * currentRadius;
+                const targetZ = Math.sin(baseAngle) * currentRadius;
+
+                // Animate camera position
+                gsap.to(camera.position, {
+                    x: targetX,
+                    z: targetZ,
+                    duration: MS_PER_QUARTER_BEAT / 250,
+                    ease: "power2.inOut",
+                });
+
+                currentBranchAngle = baseAngle;
+                updateMusicEmitterPosition();
+            }
+        }
+
+        // const leafGeometry = new THREE.CircleGeometry(0.15, 32);
+        const nodeGeometry = new THREE.SphereGeometry(0.045);
+
+        const nodeColors = {
+            seed: 0x190a04,
+            root: 0x190a04,
+            stalk: 0x292e16,
+            branch: 0x787673,
+            leaf: 0x2e8b57,
+        };
+
+        const nodes = {
+            seed: [],
+            root: [],
+            stalk: [],
+            branch: [],
+            leaf: [],
+        };
+
+        nodeObjects = new THREE.Group();
+        const connectionObjects = new THREE.Group();
+        scene.add(nodeObjects);
+        scene.add(connectionObjects);
+
+        // const MAX_ROOT_DEPTH = 5;
+        let MAX_ROOT_DEPTH = 4 + Math.floor(Math.random() * 2); // Randomize root depth
+        // const MAX_BRANCH_LENGTH = 4;
+        let MAX_BRANCH_LENGTH = 4 + Math.floor(Math.random() * 2); // Randomize branch length
+        // const MAX_CHILDREN = 2;
+        let MAX_CHILDREN = 2 + Math.floor(Math.random() * 2); // Randomize children count
+        // const MAX_STALK_BRANCHES = 3;
+        let MAX_STALK_BRANCHES = 3 + Math.floor(Math.random() * 2);
+        let FORK_HEIGHT = 2 + Math.floor(Math.random() * 3); // Randomize fork height
+        const X_VARIANCE = 1;
+        const Z_VARIANCE = 1;
+
+        const growthConfig = {
+            25: "root",
+            10000: "leaf",
+        };
+
+        let firstFork = -1;
+        let lastUsedForkIndex = 0;
 
         // Create music emitter
         musicEmitter = new THREE.Group();
@@ -3339,6 +3340,7 @@
     // Lifecycle hooks
     onMounted(() => {
         initBG();
+        prelimInit();
         resetState();
         socket.value = initializeSocket();
     });
