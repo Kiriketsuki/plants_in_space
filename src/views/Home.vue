@@ -23,36 +23,14 @@
                 <h1 data-value="Verdancy">Verdancy</h1>
             </div>
         </div>
-        <div class="nav z-10 flex w-full fixed bottom-[10vh] items-start gap-10 px-[10vw]">
-            <button
-                @click="redirect('/grow')"
-                data-value="GROW">
-                Grow
-            </button>
-            <button
-                @click="redirect('/latest')"
-                data-value="LATEST">
-                Latest
-            </button>
-            <button
-                @click="redirect('/forest')"
-                data-value="FOREST">
-                Forest
-            </button>
-        </div>
         <div id="blob"></div>
     </div>
+    <Navbar />
 </template>
 
 <script setup>
     import { onMounted, onUnmounted } from "vue";
-    import { useRouter } from "vue-router";
-
-    const router = useRouter();
-
-    const redirect = (link) => {
-        router.push(link);
-    };
+    import Navbar from "../components/Navbar.vue";
 
     let blobElement = null;
     let pointerMoveListener = null;
@@ -106,37 +84,6 @@
                 }, 2500);
             }
         };
-
-        const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        let intervals = {};
-
-        document.querySelectorAll("button").forEach((button) => {
-            button.onmouseover = (event) => {
-                let iteration = 0;
-
-                // Clear previous interval for this specific button
-                clearInterval(intervals[event.target.dataset.value]);
-
-                intervals[event.target.dataset.value] = setInterval(() => {
-                    event.target.innerText = event.target.dataset.value
-                        .split("")
-                        .map((letter, index) => {
-                            if (index < iteration) {
-                                return event.target.dataset.value[index];
-                            }
-
-                            return letters[Math.floor(Math.random() * 26)];
-                        })
-                        .join("");
-
-                    if (iteration >= event.target.dataset.value.length) {
-                        clearInterval(intervals[event.target.dataset.value]);
-                    }
-
-                    iteration += 1 / 3;
-                }, 30);
-            };
-        });
 
         window.addEventListener("pointermove", pointerMoveListener);
     });
