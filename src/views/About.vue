@@ -299,7 +299,7 @@
 
     .space-text {
         animation: background-pan 3s linear infinite;
-        background: linear-gradient(to right, var(--orange), var(--blue), var(--yellow), var(--orange)); /* Added the first color again to make smooth transition */
+        background: linear-gradient(to right, var(--orange), var(--blue), var(--yellow), var(--orange));
         background-size: 200%;
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;

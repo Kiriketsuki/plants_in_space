@@ -55,14 +55,12 @@
     let loadingInterval = null;
 
     function createLoadingAnimation() {
-        // Initial fade in
         gsap.to(loadingOpacity, {
             value: 1,
             duration: 0.5,
             ease: "power2.out",
         });
 
-        // Update dots with interval
         let dots = 0;
         loadingInterval = setInterval(() => {
             dots = (dots + 1) % 4;
@@ -82,47 +80,41 @@
     const error = ref(null);
     const isLoading = ref(true);
 
-    // Scene variables
     let scene, camera, renderer, controls;
 
-    // Firebase initialization
     const app = initializeApp(firebaseConfig);
     const storage = getStorage(app);
     const db = getFirestore(app);
 
     async function findPlantIds(numPlants = 4) {
         try {
-            // Fetch all plants, ordered by ID in descending order
             const q = query(collection(db, "plants"), orderBy("id", "desc"));
             const querySnapshot = await getDocs(q);
 
             if (querySnapshot.empty) {
                 console.error("No plants found");
-                return []; // Return an empty array if no plants are found
+                return [];
             }
 
             const plantIds = [];
             querySnapshot.forEach((doc) => {
                 const storageLink = doc.data().storageLink;
-                const plantId = storageLink.split("/").pop().replace(".glb", ""); // Extract ID from storageLink
+                const plantId = storageLink.split("/").pop().replace(".glb", "");
                 plantIds.push(plantId);
             });
 
-            // If not enough plants, add random ones until we have numPlants
             while (plantIds.length < numPlants) {
                 const randomIndex = Math.floor(Math.random() * plantIds.length);
                 plantIds.push(plantIds[randomIndex]);
             }
 
-            // Only keep the desired number of plants
             return plantIds.slice(0, numPlants);
         } catch (err) {
             console.error("Error finding plants:", err);
-            return []; // Return an empty array in case of an error
+            return [];
         }
     }
 
-    // BG
     const bg = ref(null);
     let bg_scene, bg_camera, bg_renderer, bg_animationFrameId;
     let cloudGeo,
@@ -144,17 +136,12 @@
 
         const starsVertices = [];
 
-        // Generate stars in view frustum
         for (let i = 0; i < 1500; i++) {
-            // Calculate spread based on camera FOV and distance
-            // At z = -500, calculate visible width/height
-            const z = -(Math.random() * 400 + 100); // Closer range: -500 to -100
+            const z = -(Math.random() * 400 + 100);
 
-            // Calculate visible width at this z distance (using FOV)
             const visibleHeight = 2 * Math.tan((60 * Math.PI) / 180 / 2) * Math.abs(z);
             const visibleWidth = visibleHeight * (window.innerWidth / window.innerHeight);
 
-            // Generate positions within visible area
             const x = (Math.random() - 0.5) * visibleWidth;
             const y = (Math.random() - 0.5) * visibleHeight;
 
@@ -169,27 +156,20 @@
     const initBG = () => {
         bg_scene = new THREE.Scene();
 
-        // Create camera - positioned to look down -Z axis
-        bg_camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 3000); // Increased far plane
+        bg_camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 3000);
         bg_camera.position.set(0, 0, -10);
         bg_camera.lookAt(0, 0, -100);
 
-        // Create renderer
         bg_renderer = new THREE.WebGLRenderer({ antialias: true });
         bg_renderer.setSize(window.innerWidth, window.innerHeight);
         bg.value.appendChild(bg_renderer.domElement);
 
-        // Fog - reduced density to see further
         bg_scene.fog = new THREE.FogExp2(0x111111, 0.0004);
         bg_renderer.setClearColor(bg_scene.fog.color);
 
-        // loader
         let loader = new THREE.TextureLoader();
 
-        // In the init function, modify the texture loader section:
-
         loader.load("../assets/testclouds.png", (texture) => {
-            // Improve texture filtering
             texture.minFilter = THREE.LinearFilter;
             texture.magFilter = THREE.LinearFilter;
             texture.anisotropy = bg_renderer.capabilities.getMaxAnisotropy();
@@ -203,32 +183,27 @@
                 emissiveIntensity: 0.5,
                 side: THREE.DoubleSide,
                 fog: true,
-                // Add alpha settings to reduce sharp edges
+
                 alphaTest: 0.01,
-                depthWrite: false, // Helps with transparency sorting
+                depthWrite: false,
             });
 
-            // Helper function to create a gaussian-like random number
             const gaussianRand = () => {
-                // Box-Muller transform for gaussian distribution
                 const theta = 2 * Math.PI * Math.random();
                 const rho = Math.sqrt(-2 * Math.log(1 - Math.random()));
-                return (rho * Math.cos(theta) + 1) / 2; // Normalize to 0-1 range
+                return (rho * Math.cos(theta) + 1) / 2;
             };
 
-            // Modified cloud generation
             for (let p = 0; p < 25; p++) {
                 let cloud = new THREE.Mesh(cloudGeo, cloudMaterial);
 
-                // Create bias towards center using gaussian distribution
                 const xSpread = 1200;
                 const ySpread = 600;
                 const zSpread = 200;
 
-                // Convert gaussian (0-1) to position with bias towards center
-                const x = (gaussianRand() * 2 - 1) * xSpread * 0.5; // Multiply by 0.5 to tighten spread
+                const x = (gaussianRand() * 2 - 1) * xSpread * 0.5;
                 const y = (gaussianRand() * 2 - 1) * ySpread * 0.5;
-                const z = -700 + gaussianRand() * zSpread; // Keep depth range similar but bias towards front
+                const z = -700 + gaussianRand() * zSpread;
 
                 cloud.position.set(x, y, z);
                 cloud.rotateZ(Math.random() * Math.PI * 2);
@@ -237,20 +212,13 @@
             }
         });
 
-        // Add ambient light to provide base illumination
         const ambientLight = new THREE.AmbientLight(0x333333, 1);
         bg_scene.add(ambientLight);
 
-        // Adjust point lights - increased intensity and brought closer to clouds
         light_one = new THREE.PointLight(0xff0033, 15, 1000, 1);
         light_two = new THREE.PointLight(0x0033ff, 15, 1000, 1);
         light_three = new THREE.PointLight(0x00ff00, 15, 1000, 1);
 
-        let helper_one = new THREE.PointLightHelper(light_one, 30);
-        let helper_two = new THREE.PointLightHelper(light_two, 30);
-        let helper_three = new THREE.PointLightHelper(light_three, 30);
-
-        // Position lights between camera and clouds
         light_one.position.set(0, 300, -300);
         light_two.position.set(200, -300, -300);
         light_three.position.set(-200, -300, -300);
@@ -259,20 +227,11 @@
         bg_scene.add(light_two);
         bg_scene.add(light_three);
 
-        // bg_scene.add(helper_one);
-        // bg_scene.add(helper_two);
-        // bg_scene.add(helper_three);
-
         const stars = createStars();
         bg_scene.add(stars);
-
-        // animate_bg();
     };
 
     const animate_bg = () => {
-        // bg_animationFrameId = requestAnimationFrame(animate_bg);
-
-        // Animate lights in the XY plane (parallel to viewport)
         const time = Date.now() * 0.001;
         light_one.position.x = Math.sin(time * 0.7) * 300;
         light_one.position.y = Math.cos(time * 0.5) * 300;
@@ -286,25 +245,18 @@
         light_three.position.y = Math.sin(time * 0.5) * 300;
         light_three.position.z = -300 + Math.sin(time * 0.5) * 100;
 
-        // Animate cloud rotation
         cloudParticles.forEach((cloud, i) => {
-            // Rotate each cloud at slightly different speeds
             cloud.rotation.z += ((i % 3) + 1) * 0.00015;
 
-            // Add subtle wobble to make it more organic
             cloud.rotation.x = Math.sin(time * 0.2) * 0.01;
             cloud.rotation.y = Math.cos(time * 0.3) * 0.01;
 
-            // Calculate distance from center for wave-like group scaling
-            const distanceFromCenter = new THREE.Vector3().copy(cloud.position).distanceTo(new THREE.Vector3(0, 0, -700)); // Center point of cloud distribution
+            const distanceFromCenter = new THREE.Vector3().copy(cloud.position).distanceTo(new THREE.Vector3(0, 0, -700));
 
-            // Create wave that moves outward from center
             const waveScale = 0.95 + Math.sin(time * Math.PI - distanceFromCenter * 0.005) * 0.005;
 
-            // Add subtle individual breathing
             const individualScale = 1 + Math.sin(time * 0.5 + i * 0.2) * 0.02;
 
-            // Combine both scaling effects
             const finalScale = waveScale * individualScale;
             cloud.scale.set(finalScale, finalScale, finalScale);
         });
@@ -312,15 +264,12 @@
         bg_renderer.render(bg_scene, bg_camera);
     };
 
-    // Initialize Three.js scene
     function initScene() {
         scene = new THREE.Scene();
 
-        // Camera setup
         camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 27, 71); // Updated camera position
+        camera.position.set(0, 27, 71);
 
-        // Renderer setup
         renderer = new THREE.WebGLRenderer({
             canvas: canvas.value,
             antialias: true,
@@ -332,10 +281,9 @@
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         renderer.setClearColor(0x000000, 0);
 
-        // Controls setup
         controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
-        controls.target.set(1, -9, 32); // Set where the camera is looking at
+        controls.target.set(1, -9, 32);
         controls.addEventListener("change", () => {
             console.log("Camera Position:", {
                 x: camera.position.x.toFixed(2),
@@ -349,7 +297,6 @@
             });
         });
 
-        // Lighting
         const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
         directionalLight.castShadow = true;
         directionalLight.shadow.mapSize.width = 2048;
@@ -369,7 +316,6 @@
         scene.add(sceneLight);
     }
 
-    // Animation loop
     function animate() {
         requestAnimationFrame(animate);
         animate_bg();
@@ -377,7 +323,6 @@
         renderer?.render(scene, camera);
     }
 
-    // Handle window resize
     function onWindowResize() {
         if (camera && renderer) {
             camera.aspect = window.innerWidth / window.innerHeight;
@@ -392,10 +337,9 @@
         }
     }
 
-    // Load model from Firebase Storage
     async function loadModels(plantIds) {
         try {
-            isLoading.value = true; // Assuming you have a reactive isLoading variable
+            isLoading.value = true;
 
             const numPlants = plantIds.length;
             const gridSize = Math.sqrt(numPlants);
@@ -430,11 +374,9 @@
 
                     let x, z;
                     if (gridSize % 2 === 0) {
-                        // Even grid size
                         x = ((i % gridSize) - gridSize / 2 + 0.5) * spacing;
                         z = (Math.floor(i / gridSize) + 1) * spacing;
                     } else {
-                        // Odd grid size
                         x = ((i % gridSize) - Math.floor(gridSize / 2)) * spacing;
                         z = (Math.floor(i / gridSize) + 1) * spacing;
                     }
@@ -456,24 +398,10 @@
         }
     }
 
-    function positionCamera(numPlants, spacing) {
-        const gridSize = Math.sqrt(numPlants);
-        const gridDiagonal = Math.sqrt(2) * gridSize * spacing;
-        const cameraDistance = gridDiagonal;
-
-        // Calculate center of the grid
-        let centerX = 0;
-        let centerZ = (gridSize / 2 + 0.5) * spacing; // Adjust for grid starting at z = spacing
-
-        camera.position.set(0, 20, cameraDistance * 1.5);
-        camera.lookAt(centerX, 0, centerZ);
-    }
-
     function redirectHome() {
         router.push("/");
     }
 
-    // Lifecycle hooks
     onMounted(async () => {
         createLoadingAnimation();
         initBG();
@@ -489,7 +417,6 @@
         cleanupLoadingAnimation();
         window.removeEventListener("resize", onWindowResize);
 
-        // Cleanup Three.js resources
         scene?.traverse((object) => {
             if (object.geometry) {
                 object.geometry.dispose();

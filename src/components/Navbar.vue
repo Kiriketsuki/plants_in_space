@@ -38,7 +38,6 @@
         },
         setup() {
             onMounted(() => {
-                // Letters
                 const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
                 let intervals = {};
 
@@ -46,7 +45,6 @@
                     button.onmouseover = (event) => {
                         let iteration = 0;
 
-                        // Clear previous interval for this specific button
                         clearInterval(intervals[event.target.dataset.value]);
 
                         intervals[event.target.dataset.value] = setInterval(() => {

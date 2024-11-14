@@ -56,14 +56,12 @@
     let loadingInterval = null;
 
     function createLoadingAnimation() {
-        // Initial fade in
         gsap.to(loadingOpacity, {
             value: 1,
             duration: 0.5,
             ease: "power2.out",
         });
 
-        // Update dots with interval
         let dots = 0;
         loadingInterval = setInterval(() => {
             dots = (dots + 1) % 4;
@@ -90,15 +88,12 @@
     const error = ref(null);
     const isLoading = ref(true);
 
-    // Scene variables
     let scene, camera, renderer, controls;
 
-    // Firebase initialization
     const app = initializeApp(firebaseConfig);
     const storage = getStorage(app);
     const db = getFirestore(app);
 
-    // BG
     const bg = ref(null);
     let bg_scene, bg_camera, bg_renderer, bg_animationFrameId;
     let cloudGeo,
@@ -120,17 +115,12 @@
 
         const starsVertices = [];
 
-        // Generate stars in view frustum
         for (let i = 0; i < 1500; i++) {
-            // Calculate spread based on camera FOV and distance
-            // At z = -500, calculate visible width/height
-            const z = -(Math.random() * 400 + 100); // Closer range: -500 to -100
+            const z = -(Math.random() * 400 + 100);
 
-            // Calculate visible width at this z distance (using FOV)
             const visibleHeight = 2 * Math.tan((60 * Math.PI) / 180 / 2) * Math.abs(z);
             const visibleWidth = visibleHeight * (window.innerWidth / window.innerHeight);
 
-            // Generate positions within visible area
             const x = (Math.random() - 0.5) * visibleWidth;
             const y = (Math.random() - 0.5) * visibleHeight;
 
@@ -145,27 +135,20 @@
     const initBG = () => {
         bg_scene = new THREE.Scene();
 
-        // Create camera - positioned to look down -Z axis
-        bg_camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 3000); // Increased far plane
+        bg_camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 3000);
         bg_camera.position.set(0, 0, -10);
         bg_camera.lookAt(0, 0, -100);
 
-        // Create renderer
         bg_renderer = new THREE.WebGLRenderer({ antialias: true });
         bg_renderer.setSize(window.innerWidth, window.innerHeight);
         bg.value.appendChild(bg_renderer.domElement);
 
-        // Fog - reduced density to see further
         bg_scene.fog = new THREE.FogExp2(0x111111, 0.0004);
         bg_renderer.setClearColor(bg_scene.fog.color);
 
-        // loader
         let loader = new THREE.TextureLoader();
 
-        // In the init function, modify the texture loader section:
-
         loader.load("../assets/clouds.png", (texture) => {
-            // Improve texture filtering
             texture.minFilter = THREE.LinearFilter;
             texture.magFilter = THREE.LinearFilter;
             texture.anisotropy = bg_renderer.capabilities.getMaxAnisotropy();
@@ -183,27 +166,22 @@
                 depthWrite: false,
             });
 
-            // Helper function to create a gaussian-like random number
             const gaussianRand = () => {
-                // Box-Muller transform for gaussian distribution
                 const theta = 2 * Math.PI * Math.random();
                 const rho = Math.sqrt(-2 * Math.log(1 - Math.random()));
-                return (rho * Math.cos(theta) + 1) / 2; // Normalize to 0-1 range
+                return (rho * Math.cos(theta) + 1) / 2;
             };
 
-            // Modified cloud generation
             for (let p = 0; p < 25; p++) {
                 let cloud = new THREE.Mesh(cloudGeo, cloudMaterial);
 
-                // Create bias towards center using gaussian distribution
                 const xSpread = 1200;
                 const ySpread = 600;
                 const zSpread = 200;
 
-                // Convert gaussian (0-1) to position with bias towards center
-                const x = (gaussianRand() * 2 - 1) * xSpread * 0.5; // Multiply by 0.5 to tighten spread
+                const x = (gaussianRand() * 2 - 1) * xSpread * 0.5;
                 const y = (gaussianRand() * 2 - 1) * ySpread * 0.5;
-                const z = -700 + gaussianRand() * zSpread; // Keep depth range similar but bias towards front
+                const z = -700 + gaussianRand() * zSpread;
 
                 cloud.position.set(x, y, z);
                 cloud.rotateZ(Math.random() * Math.PI * 2);
@@ -212,20 +190,13 @@
             }
         });
 
-        // Add ambient light to provide base illumination
         const ambientLight = new THREE.AmbientLight(0x333333, 1);
         bg_scene.add(ambientLight);
 
-        // Adjust point lights - increased intensity and brought closer to clouds
         light_one = new THREE.PointLight(0xff0033, 15, 1000, 1);
         light_two = new THREE.PointLight(0x0033ff, 15, 1000, 1);
         light_three = new THREE.PointLight(0x00ff00, 15, 1000, 1);
 
-        let helper_one = new THREE.PointLightHelper(light_one, 30);
-        let helper_two = new THREE.PointLightHelper(light_two, 30);
-        let helper_three = new THREE.PointLightHelper(light_three, 30);
-
-        // Position lights between camera and clouds
         light_one.position.set(0, 300, -300);
         light_two.position.set(200, -300, -300);
         light_three.position.set(-200, -300, -300);
@@ -234,20 +205,11 @@
         bg_scene.add(light_two);
         bg_scene.add(light_three);
 
-        // bg_scene.add(helper_one);
-        // bg_scene.add(helper_two);
-        // bg_scene.add(helper_three);
-
         const stars = createStars();
         bg_scene.add(stars);
-
-        // animate_bg();
     };
 
     const animate_bg = () => {
-        // bg_animationFrameId = requestAnimationFrame(animate_bg);
-
-        // Animate lights in the XY plane (parallel to viewport)
         const time = Date.now() * 0.001;
         light_one.position.x = Math.sin(time * 0.7) * 300;
         light_one.position.y = Math.cos(time * 0.5) * 300;
@@ -261,25 +223,18 @@
         light_three.position.y = Math.sin(time * 0.5) * 300;
         light_three.position.z = -300 + Math.sin(time * 0.5) * 100;
 
-        // Animate cloud rotation
         cloudParticles.forEach((cloud, i) => {
-            // Rotate each cloud at slightly different speeds
             cloud.rotation.z += ((i % 3) + 1) * 0.00015;
 
-            // Add subtle wobble to make it more organic
             cloud.rotation.x = Math.sin(time * 0.2) * 0.01;
             cloud.rotation.y = Math.cos(time * 0.3) * 0.01;
 
-            // Calculate distance from center for wave-like group scaling
-            const distanceFromCenter = new THREE.Vector3().copy(cloud.position).distanceTo(new THREE.Vector3(0, 0, -700)); // Center point of cloud distribution
+            const distanceFromCenter = new THREE.Vector3().copy(cloud.position).distanceTo(new THREE.Vector3(0, 0, -700));
 
-            // Create wave that moves outward from center
             const waveScale = 0.95 + Math.sin(time * Math.PI - distanceFromCenter * 0.005) * 0.005;
 
-            // Add subtle individual breathing
             const individualScale = 1 + Math.sin(time * 0.5 + i * 0.2) * 0.02;
 
-            // Combine both scaling effects
             const finalScale = waveScale * individualScale;
             cloud.scale.set(finalScale, finalScale, finalScale);
         });
@@ -287,16 +242,13 @@
         bg_renderer.render(bg_scene, bg_camera);
     };
 
-    // Initialize Three.js scene
     function initScene() {
         scene = new THREE.Scene();
 
-        // Camera setup
         camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        // camera.position.set(8, 3.5, 0);
+
         camera.position.set(25, 0, 25);
 
-        // Renderer setup
         renderer = new THREE.WebGLRenderer({
             canvas: canvas.value,
             antialias: true,
@@ -306,11 +258,9 @@
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setClearColor(0x000000, 0);
 
-        // Controls setup
         controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
 
-        // Lighting
         const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
         directionalLight.position.set(5, 5, 5);
         scene.add(directionalLight);
@@ -318,11 +268,9 @@
         const sceneLight = new THREE.AmbientLight(0xffffff, 0.125);
         scene.add(sceneLight);
 
-        // Enable shadow mapping in the renderer
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-        // Configure directional light for shadows
         directionalLight.castShadow = true;
         directionalLight.shadow.mapSize.width = 2048;
         directionalLight.shadow.mapSize.height = 2048;
@@ -336,7 +284,6 @@
         directionalLight.position.set(10, 15, 10);
     }
 
-    // Animation loop
     function animate() {
         requestAnimationFrame(animate);
         animate_bg();
@@ -344,7 +291,6 @@
         renderer?.render(scene, camera);
     }
 
-    // Handle window resize
     function onWindowResize() {
         if (camera && renderer) {
             camera.aspect = window.innerWidth / window.innerHeight;
@@ -359,7 +305,6 @@
         }
     }
 
-    // Load model from Firebase Storage
     async function loadModel() {
         try {
             isLoading.value = true;
@@ -367,14 +312,11 @@
             const fileRef = storageRef(storage, `plants/${filename}`);
 
             try {
-                // Get download URL
                 const url = await getDownloadURL(fileRef);
 
-                // Load the model
                 const loader = new GLTFLoader();
                 const gltf = await loader.loadAsync(url);
 
-                // Enable shadows for all meshes in the model
                 gltf.scene.traverse((node) => {
                     if (node.isMesh) {
                         node.castShadow = true;
@@ -383,30 +325,20 @@
                             node.castShadow = false;
                         }
 
-                        // Ensure materials are configured for shadows
                         if (node.material) {
-                            // Handle both single materials and material arrays
                             const materials = Array.isArray(node.material) ? node.material : [node.material];
 
                             materials.forEach((material) => {
-                                // Enable shadow properties
                                 material.shadowSide = THREE.FrontSide;
 
-                                // Ensure proper material settings
-                                // if (material.map) material.map.encoding = THREE.sRGBEncoding;
-                                // if (material.emissiveMap) material.emissiveMap.encoding = THREE.sRGBEncoding;
-
-                                // Update material to ensure changes take effect
                                 material.needsUpdate = true;
                             });
                         }
                     }
                 });
 
-                // Add the model to the scene
                 scene.add(gltf.scene);
 
-                // Update controls
                 controls.update();
             } catch (error) {
                 console.error("Error loading model:", error);
@@ -427,7 +359,6 @@
         router.push("/");
     }
 
-    // Lifecycle hooks
     onMounted(async () => {
         createLoadingAnimation();
         initBG();
@@ -442,7 +373,6 @@
         cleanupLoadingAnimation();
         window.removeEventListener("resize", onWindowResize);
 
-        // Cleanup Three.js resources
         scene?.traverse((object) => {
             if (object.geometry) {
                 object.geometry.dispose();

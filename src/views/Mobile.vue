@@ -306,7 +306,6 @@
     import { ref, onMounted, onUnmounted, watch, computed } from "vue";
     import { io } from "socket.io-client";
     import { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET } from "../../secrets";
-    import { doc } from "firebase/firestore";
 
     const props = defineProps(["id"]);
     const error = ref("");
@@ -336,7 +335,7 @@
 
     let debounceTimeout;
 
-    const CHUNK_SIZE = 16384; // 16KB chunks
+    const CHUNK_SIZE = 16384; 
 
     let socket;
 
@@ -351,9 +350,9 @@
 
     // Socket Functions
     function initializeSocket() {
-        // const url = `http://${window.location.hostname}:3000`;
+        
         const url = "https://plants-socket-24702956633.asia-southeast1.run.app";
-        // const url = "https://plants-in-space-socket.onrender.com";
+        
         connectionStatus.value = "Connecting";
 
         if (socket) {
@@ -422,62 +421,6 @@
     }
 
     // File Functions
-
-    function triggerFileUpload() {
-        fileInput.value.click();
-    }
-
-    async function handleFileUpload(event) {
-        const files = Array.from(event.target.files);
-        // Validate file type and count
-        const invalidFiles = files.filter((file) => !file.type.includes("audio/mpeg"));
-        if (invalidFiles.length > 0) {
-            error.value = "Only MP3 files are allowed";
-            return;
-        }
-
-        if (selectedSongs.value.length + files.length > 5) {
-            error.value = "Maximum 5 files allowed";
-            return;
-        }
-
-        // Process each file
-        files.forEach((file) => {
-            const newSong = {
-                id: Math.random().toString(36).substr(2, 9),
-                name: file.name.replace(".mp3", ""),
-                tempo: 100,
-                file: file,
-                size: file.size,
-                uploaded: false,
-            };
-
-            // Add the song to selected songs
-            selectedSongs.value = [...selectedSongs.value, newSong];
-        });
-
-        // Initialize distributions after adding songs
-        initializeDistributions(selectedSongs.value);
-
-        try {
-            await Promise.all(
-                selectedSongs.value.map(async (song) => {
-                    console.log("Getting tempo for:", song.name);
-                    await getSongTempo(song.name).then((tempoData) => {
-                        console.log("Tempo data:", tempoData);
-                        song.tempo = tempoData.tempo;
-                        song.name = tempoData.trackName;
-                    });
-                }),
-            );
-        } catch (err) {
-            error.value = "Error getting tempo data: " + err.message;
-        }
-
-        // Clear the input to allow selecting the same file again
-        event.target.value = "";
-    }
-
     async function uploadSongFile(song) {
         return new Promise((resolve, reject) => {
             const file = song.file;
@@ -644,7 +587,6 @@
     }
 
     // Song Meta Functions
-
     function initializeDistributions(songs) {
         if (songs.length === 0) {
             songDistributions.value = {};
@@ -693,7 +635,7 @@
                 if (!changeWasMade) break;
             }
         } else if (totalChange < 0) {
-            // Handle decrease
+            
             let remainingChange = Math.abs(totalChange);
             while (remainingChange > 0) {
                 let changeWasMade = false;
@@ -732,7 +674,7 @@
 
     async function getSongTempo(songName) {
         try {
-            // Get access token
+            
             const authResponse = await fetch("https://accounts.spotify.com/api/token", {
                 method: "POST",
                 headers: {
@@ -748,9 +690,9 @@
 
             const authData = await authResponse.json();
             const accessToken = authData.access_token;
-            // console.log("Access Token:", accessToken);
+            
 
-            // Search for the song
+            
             const searchResponse = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(songName)}&type=track&limit=1`, {
                 headers: {
                     Authorization: `Bearer ${accessToken}`,
@@ -769,7 +711,7 @@
 
             const trackId = searchData.tracks.items[0].id;
 
-            // Get audio features for the track
+            
             const featuresResponse = await fetch(`https://api.spotify.com/v1/audio-features/${trackId}`, {
                 headers: {
                     Authorization: `Bearer ${accessToken}`,
@@ -798,8 +740,8 @@
         initializeDistributions(remainingSongs);
     }
 
-    // Trigger growth
-    // Trigger growth
+    
+    
     async function startGrowth() {
         if (!socket || !socket.connected) {
             error.value = "Not connected to server. Please try reconnecting.";
@@ -813,18 +755,18 @@
         }
 
         try {
-            // Separate songs into local files and Spotify tracks
+            
             const localFiles = selectedSongs.value.filter((song) => song.file);
             const spotifyTracks = selectedSongs.value.filter((song) => song.spotifyId);
 
-            // Upload local files if any
+            
             for (const song of localFiles) {
                 if (!song.uploaded) {
                     await uploadSongFile(song);
                 }
             }
 
-            // Map all songs to their basic data structure
+            
             const songData = selectedSongs.value.map((song) => ({
                 id: song.id,
                 name: song.name,
@@ -837,7 +779,7 @@
                 }),
             }));
 
-            // Categorize songs for the server
+            
             const categorizedSongs = {
                 localFiles: songData.filter((song) => !song.spotifyTrack),
                 spotifyTracks: songData.filter((song) => song.spotifyTrack),
@@ -935,15 +877,15 @@
 
         let normalizedValue;
         if (gamma < -90) {
-            normalizedValue = 0; // Fully left
+            normalizedValue = 0; 
         } else if (gamma > 90) {
-            normalizedValue = 100; // Fully right
+            normalizedValue = 100; 
         } else {
-            // Map -45 to +45 range to 0-100
+            
             normalizedValue = ((gamma + 90) / 180) * 100;
         }
 
-        // Add smoothing to prevent jitter
+        
         if (Math.abs(musicDirection.value - normalizedValue) > 1) {
             musicDirection.value = Math.round(normalizedValue);
             updateMusicDirection();
@@ -1024,14 +966,14 @@
         cursor: pointer;
     }
 
-    /* Hide the arrows in number inputs for Chrome, Safari, Edge, and Opera */
+    
     input[type="number"]::-webkit-outer-spin-button,
     input[type="number"]::-webkit-inner-spin-button {
         -webkit-appearance: none;
         margin: 0;
     }
 
-    /* Hide the arrows in number inputs for Firefox */
+    
     input[type="number"] {
         -moz-appearance: textfield;
     }

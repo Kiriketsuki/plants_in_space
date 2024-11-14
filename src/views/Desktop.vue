@@ -344,11 +344,10 @@
 
     // BG
     const bg = ref(null);
-    let bg_scene, bg_camera, bg_renderer, bg_animationFrameId;
+    let bg_scene, bg_camera, bg_renderer;
     let cloudGeo,
         cloudMaterial,
         cloudParticles = [];
-    let light_one, light_two, light_three;
     let lights = [];
 
     // Three.js refs
@@ -505,26 +504,22 @@
         return selectedSongs.value.every((song) => songFiles.value.has(song.id)) && selectedSongs.value.length > 0;
     });
 
-    // Utility functions
     function formatTime(seconds) {
         const mins = Math.floor(seconds / 60);
         const secs = Math.floor(seconds % 60);
         return `${mins}:${secs.toString().padStart(2, "0")}`;
     }
 
-    // Spotify Download
     async function downloadSpotifyTrack(spotifyId) {
         try {
-            // Request download from spotify-dl service
             const response = await fetch(`https://spotify-dl-service-24702956633.asia-southeast1.run.app/download/${spotifyId}`);
-            // const response = await fetch(`http://localhost:5000/download/${spotifyId}`);
+
             if (!response.ok) {
                 throw new Error(`Failed to get download URL: ${response.statusText}`);
             }
 
             const data = await response.json();
 
-            // Download the file from Firebase Storage
             const audioResponse = await fetch(data.url);
             if (!audioResponse.ok) {
                 throw new Error("Failed to download audio file");
@@ -532,7 +527,6 @@
 
             const arrayBuffer = await audioResponse.arrayBuffer();
 
-            // Create AudioBuffer from downloaded file
             if (!audioContext.value) {
                 audioContext.value = new (window.AudioContext || window.webkitAudioContext)();
             }
@@ -561,12 +555,10 @@
                     complete: true,
                 });
             }
-            // Local files are handled by existing file transfer logic
         } catch (error) {
             console.error(`Error processing ${type} song:`, error);
             error.value = `Error processing song: ${error.message}`;
 
-            // Update status to error
             const downloadIndex = pendingSpotifyDownloads.value.findIndex((t) => t.spotifyId === song.spotifyTrack?.spotifyId);
             if (downloadIndex >= 0) {
                 pendingSpotifyDownloads.value[downloadIndex].status = "error";
@@ -574,11 +566,9 @@
         }
     }
 
-    // Socket initialization
     function initializeSocket() {
-        // const url = `http://${window.location.hostname}:3000`;
         const url = "https://plants-socket-24702956633.asia-southeast1.run.app";
-        // const url = "https://plants-in-space-socket.onrender.com";
+
         connectionStatus.value = "Connecting";
 
         socket.value = io(url, {
@@ -655,7 +645,6 @@
                             currentOffset += chunk.data.byteLength;
                         });
 
-                        // Create audio context if needed
                         if (!audioContext.value) {
                             audioContext.value = new (window.AudioContext || window.webkitAudioContext)();
                         }
@@ -682,11 +671,9 @@
             }
         });
 
-        // Modify the growth-started handler
         socket.value.on("growth-started", async ({ songs, growthTime: time, distributions }) => {
             console.log("Growth started with:", { songs, time, distributions });
 
-            // Reset playback state
             if (currentAudio.value) {
                 currentAudio.value.source.stop();
                 currentAudio.value = null;
@@ -697,7 +684,6 @@
             currentTime.value = 0;
             isPlaying.value = false;
 
-            // Set new state
             growthTime.value = time;
             songDistributions.value = distributions || {};
             growthActive.value = true;
@@ -714,7 +700,6 @@
                     });
                 }
 
-                // Set local files to selectedSongs for existing file transfer logic
                 if (songs.localFiles) {
                     selectedSongs.value = songs.localFiles;
                 }
@@ -741,7 +726,6 @@
             }
         });
 
-        // Also add error logging to help debug
         socket.value.on("error", (err) => {
             console.error("Socket error:", err);
             error.value = `Socket error: ${err.message}`;
@@ -826,7 +810,6 @@
     // Audio playback functions
 
     async function togglePlayback() {
-        // document.querySelector(".main").style.display = "none";
         gsap.to(".main", {
             opacity: 0,
             duration: 1,
@@ -989,9 +972,6 @@
             case "root":
                 return rootMesh;
             case "leaf":
-                // console.log("Note name:", noteName);
-                // console.log(noteMap[noteName]);
-                // console.log(leafMeshes[noteMap[noteName]]);
                 return leafMeshes[noteMap[noteName]];
             case "flower":
                 return flowerMesh;
@@ -1021,7 +1001,6 @@
             leftGainNode.value = audioContext.value.createGain();
             rightGainNode.value = audioContext.value.createGain();
 
-            // Modified audio routing to fix connection error
             source.buffer = audioBuffer;
 
             // Connect source to analyzer first
@@ -1067,7 +1046,6 @@
 
                 for (let i = 0; i < dataArray.length; i++) {
                     if (dataArray[i] > 200) {
-                        // Threshold
                         significantFreqs.push({
                             frequency: i * frequencyResolution,
                             energy: dataArray[i],
@@ -1088,9 +1066,8 @@
                         };
                     })
                     .filter((note, index, self) => index === self.findIndex((n) => n.name === note.name))
-                    .sort((a, b) => b.energy - a.energy); // Sort by energy (highest first)
+                    .sort((a, b) => b.energy - a.energy);
 
-                // Update the reactive ref
                 detectedNotes.value = detected;
 
                 requestAnimationFrame(analyzeAudio);
@@ -1098,7 +1075,6 @@
 
             analyzeAudio();
 
-            // Set initial volumes
             updateChannelVolumes();
 
             source.loop = true;
@@ -1126,7 +1102,6 @@
         isCompleted = true;
         audioStatus.value = "Ambient";
 
-        // Clear the playback interval since we don't need to track growth time anymore
         if (playbackInterval.value) {
             clearInterval(playbackInterval.value);
             playbackInterval.value = null;
@@ -1140,7 +1115,7 @@
                     z: 0.2,
                     duration: 2,
                     ease: "elastic.out(1, 0.3)",
-                    delay: Math.random() * 0.5, // Stagger the animations slightly
+                    delay: Math.random() * 0.5,
                 });
             }
         });
@@ -1148,12 +1123,11 @@
         gsap.to(camera.position, {
             duration: 2,
             x: 25,
-            // y: lastStalkHeight * 0.5 * 1.5,
+
             y: 0,
             z: 25,
             ease: "power2.inOut",
             onComplete: () => {
-                // controls.target(0, camera.position.y, 0);
                 controls.target = new THREE.Vector3(0, camera.position.y - 3.5, 0);
                 let save = document.querySelector(".save");
                 gsap.fromTo(
@@ -1185,7 +1159,6 @@
                 const leftVolume = { gain: maxGain };
                 const rightVolume = { gain: maxGain };
 
-                // Use GSAP to animate the volume reduction
                 gsap.to(leftVolume, {
                     gain: maxGain * 0.01,
                     duration: 5,
@@ -1212,7 +1185,6 @@
                     ease: "power1.out",
                 });
 
-                // Enable looping if not already set
                 currentAudio.value.source.loop = true;
             } catch (err) {
                 console.error("Error adjusting audio:", err);
@@ -1296,7 +1268,6 @@
     }
 
     // BACKGROUND ANIMATION
-
     const createStars = () => {
         const starsGeometry = new THREE.BufferGeometry();
         const starsMaterial = new THREE.PointsMaterial({
@@ -1326,33 +1297,27 @@
         const gaussianRand = () => {
             const theta = 2 * Math.PI * Math.random();
             const rho = Math.sqrt(-2 * Math.log(1 - Math.random()));
-            return (rho * Math.cos(theta) + 1) / 2; // Normalize to 0-1 range
+            return (rho * Math.cos(theta) + 1) / 2;
         };
 
         // Generate stars in view frustum
         for (let i = 0; i < 15000; i++) {
-            // Use gaussian distribution for depth, centered around lookAtPoint.z
-            const zSpread = 800; // Total depth range
+            const zSpread = 800;
             const gaussianZ = gaussianRand();
-            const depth = (gaussianZ * 2 - 1) * zSpread; // Convert 0-1 to -zSpread to +zSpread
+            const depth = (gaussianZ * 2 - 1) * zSpread;
             const z = lookAtPoint.z + depth;
 
-            // Calculate visible dimensions at this depth
             const distanceToPlane = Math.abs(cameraPosition.distanceTo(new THREE.Vector3(0, 0, z)));
             const visibleHeight = 2 * Math.tan((cameraFOV * Math.PI) / 360) * distanceToPlane;
             const visibleWidth = visibleHeight * (window.innerWidth / window.innerHeight);
 
-            // Use gaussian distribution for x and y as well
             const xOffset = (gaussianRand() * 2 - 1) * visibleWidth;
             const yOffset = (gaussianRand() * 2 - 1) * visibleHeight;
 
-            // Apply a density falloff based on distance from center
             const distanceFromCenter = Math.sqrt((xOffset / visibleWidth) ** 2 + (yOffset / visibleHeight) ** 2 + (depth / zSpread) ** 2);
 
-            // Skip some stars based on distance from center to create natural falloff
             if (Math.random() < distanceFromCenter * 0.7) continue;
 
-            // Calculate actual position using camera orientation
             const position = new THREE.Vector3().copy(lookAtPoint).add(cameraRight.clone().multiplyScalar(xOffset)).add(cameraUpAdjusted.clone().multiplyScalar(yOffset)).add(cameraDirection.clone().multiplyScalar(depth));
 
             starsVertices.push(position.x, position.y, position.z);
@@ -1364,8 +1329,6 @@
     };
 
     function initializeLights() {
-        console.log("Initializing lights...");
-
         // Clear any existing lights from the scene and array
         lights.forEach((light) => {
             if (light && bg_scene.children.includes(light)) {
@@ -1382,12 +1345,7 @@
 
         // Create new lights
         lights = initialConfig.map((config) => {
-            const light = new THREE.PointLight(
-                config.color,
-                config.intensity,
-                1000, // distance
-                1, // decay
-            );
+            const light = new THREE.PointLight(config.color, config.intensity, 1000, 1);
             light.position.set(config.position.x, config.position.y, config.position.z);
             bg_scene.add(light);
             return light;
@@ -1436,7 +1394,6 @@
                 return (rho * Math.cos(theta) + 1) / 2;
             };
 
-            // Modified cloud generation to ensure parallel orientation
             for (let p = 0; p < 25; p++) {
                 let cloud = new THREE.Mesh(cloudGeo, cloudMaterial);
 
@@ -1450,7 +1407,6 @@
 
                 cloud.position.set(x, y, z);
 
-                // Calculate the rotation to make clouds parallel to viewport
                 const viewMatrix = new THREE.Matrix4();
                 viewMatrix.lookAt(
                     new THREE.Vector3(21, 131, 144), // bg_camera position
@@ -1458,11 +1414,9 @@
                     new THREE.Vector3(0, 1, 0), // Up vector
                 );
 
-                // Extract rotation from view matrix
                 const rotation = new THREE.Euler().setFromRotationMatrix(viewMatrix);
                 cloud.rotation.copy(rotation);
 
-                // Add random rotation only around Z axis (perpendicular to view)
                 cloud.rotateZ(Math.random() * Math.PI * 2);
 
                 cloudParticles.push(cloud);
@@ -1473,70 +1427,27 @@
         const ambientLight = new THREE.AmbientLight(0x333333, 1);
         bg_scene.add(ambientLight);
 
-        // light_one = new THREE.PointLight(0xe38295, 865, 1000, 1);
-        // light_two = new THREE.PointLight(0x0033ff, 336, 1000, 1);
-        // light_three = new THREE.PointLight(0xeac086, 951, 1000, 1);
-
-        // // Keeping your light positions
-        // light_one.position.set(-102, 180, -250);
-        // light_two.position.set(200, 58, 21);
-        // light_three.position.set(-213, -201, -397);
-
-        // bg_scene.add(light_one);
-        // bg_scene.add(light_two);
-        // bg_scene.add(light_three);
-
-        // let helper_one = new THREE.PointLightHelper(light_one, 30);
-        // let helper_two = new THREE.PointLightHelper(light_two, 30);
-        // let helper_three = new THREE.PointLightHelper(light_three, 30);
-
         initializeLights();
-
-        // bg_scene.add(helper_one);
-        // bg_scene.add(helper_two);
-        // bg_scene.add(helper_three);
 
         const stars = createStars();
         bg_scene.add(stars);
-        // animate_bg();
     };
 
     const animate_bg = () => {
-        // bg_animationFrameId = requestAnimationFrame(animate_bg);
-
-        // Animate lights in the XY plane (parallel to viewport)
         const time = Date.now() * 0.001;
-        // light_one.position.x = Math.sin(time * 0.7) * 300;
-        // light_one.position.y = Math.cos(time * 0.5) * 300;
-        // light_one.position.z = -300 + Math.sin(time * 0.3) * 100;
 
-        // light_two.position.x = Math.cos(time * 0.3) * 300;
-        // light_two.position.y = Math.sin(time * 0.5) * 300;
-        // light_two.position.z = -300 + Math.cos(time * 0.4) * 100;
-
-        // light_three.position.x = Math.sin(time * 0.7) * 300;
-        // light_three.position.y = Math.sin(time * 0.5) * 300;
-        // light_three.position.z = -300 + Math.sin(time * 0.5) * 100;
-
-        // Animate cloud rotation
         cloudParticles.forEach((cloud, i) => {
-            // Rotate each cloud at slightly different speeds
             cloud.rotation.z += ((i % 3) + 1) * 0.00015;
 
-            // Add subtle wobble to make it more organic
             cloud.rotation.x = Math.sin(time * 0.2) * 0.01;
             cloud.rotation.y = Math.cos(time * 0.3) * 0.01;
 
-            // Calculate distance from center for wave-like group scaling
-            const distanceFromCenter = new THREE.Vector3().copy(cloud.position).distanceTo(new THREE.Vector3(0, 0, -700)); // Center point of cloud distribution
+            const distanceFromCenter = new THREE.Vector3().copy(cloud.position).distanceTo(new THREE.Vector3(0, 0, -700));
 
-            // Create wave that moves outward from center
             const waveScale = 0.95 + Math.sin(time * Math.PI - distanceFromCenter * 0.005) * 0.005;
 
-            // Add subtle individual breathing
             const individualScale = 1 + Math.sin(time * 0.5 + i * 0.2) * 0.02;
 
-            // Combine both scaling effects
             const finalScale = waveScale * individualScale;
             cloud.scale.set(finalScale, finalScale, finalScale);
         });
@@ -1556,9 +1467,7 @@
     function updateMusicEmitterPosition() {
         if (!musicEmitter) return;
 
-        // Convert 0-100 position to radians relative to current branch angle
-        // Flip the normalization for correct left/right orientation
-        const normalizedPosition = (50 - musicDirection.value) / 50; // Convert to -1 to 1 range, flipped
+        const normalizedPosition = (50 - musicDirection.value) / 50;
 
         if (Math.abs(normalizedPosition) <= 0.1) {
             emitterInfluence = 0;
@@ -1566,8 +1475,8 @@
             // Scale influence from 0 to 1 between 0.1 and 1.0
             // Using (x - 0.1) / 0.9 to normalize the range 0.1 to 1.0 into 0 to 1
             emitterInfluence = (Math.abs(normalizedPosition) - 0.1) / 0.9;
-            // Optional: Add easing for smoother transition
-            emitterInfluence = Math.pow(emitterInfluence, 2); // Square for more gradual initial increase
+
+            emitterInfluence = Math.pow(emitterInfluence, 2);
         }
 
         // Calculate final angle by adding offset to current branch angle
@@ -1581,7 +1490,7 @@
     }
 
     let waterVolume, waterVolumeMesh;
-    const clicksData = new Float32Array(40); // 10 clicks * 4 components
+    const clicksData = new Float32Array(40);
     const loadingManager = new THREE.LoadingManager();
     const loader = new GLTFLoader(loadingManager);
 
@@ -1595,11 +1504,10 @@
         camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
         renderer = new THREE.WebGLRenderer({ canvas: canvas.value, antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setClearColor(0x000000, 0); // Set clear color to transparent
+        renderer.setClearColor(0x000000, 0);
 
         controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
-        // controls.enablePan = false;
 
         const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
         directionalLight.position.set(5, 5, 5);
@@ -1626,7 +1534,7 @@
         directionalLight.position.set(10, 15, 10);
 
         // Create the water surface
-        // const waterGeometry = new THREE.PlaneGeometry(20, 20, 100, 100);
+
         function createCircularWaterGeometry(radius, segments) {
             const geometry = new THREE.BufferGeometry();
             const vertices = [];
@@ -1647,7 +1555,6 @@
 
                     vertices.push(x, y, 0);
 
-                    // UV coordinates mapped as if it were a plane
                     uvs.push((x + radius) / (2 * radius), (y + radius) / (2 * radius));
                 }
             }
@@ -1673,8 +1580,7 @@
             return geometry;
         }
 
-        // Usage:
-        const waterGeometry = createCircularWaterGeometry(10, 100); // radius = 10, segments = 100
+        const waterGeometry = createCircularWaterGeometry(10, 100);
         const waterMaterial = new THREE.MeshStandardMaterial({
             color: new THREE.Color("#4097e3"),
             transparent: true,
@@ -1696,11 +1602,10 @@
             shader.uniforms.time = { value: 0 };
             shader.uniforms.clicks = { value: clicksData };
             shader.uniforms.frequency = { value: 3.0 };
-            shader.uniforms.amplitude = { value: 0.3 }; // Increased from 0.1 to 0.3
-            shader.uniforms.speed = { value: 30.0 }; // Increased from 15.0 to 30.0
+            shader.uniforms.amplitude = { value: 0.3 };
+            shader.uniforms.speed = { value: 30.0 };
             shader.uniforms.decay = { value: 2.5 };
 
-            // Add custom vertex shader code
             shader.vertexShader =
                 `
         uniform float time;
@@ -1726,7 +1631,6 @@
         }
     ` + shader.vertexShader;
 
-            // Replace the begin_vertex chunk
             const token = "#include <begin_vertex>";
             const customTransform = `
         vec3 transformed = vec3(position);
@@ -1758,7 +1662,7 @@
     `;
 
             shader.vertexShader = shader.vertexShader.replace(token, customTransform);
-            window.waterShader = shader; // Store shader reference for updates
+            window.waterShader = shader;
         };
 
         const water = new THREE.Mesh(waterGeometry, waterMaterial);
@@ -1793,7 +1697,6 @@
 
                 const meshes = [];
 
-                // First pass - collect all meshes
                 gltf.scene.traverse((object) => {
                     if (object.isMesh) {
                         meshes.push(object.clone());
@@ -1801,12 +1704,11 @@
                 });
 
                 meshes.forEach((mesh) => {
-                    // console.log(mesh);
                     mesh.name = "display-case";
                     mesh.position.set(0, 0, 0);
                     mesh.rotation.set(-Math.PI / 2, 0, 0);
                     mesh.receiveShadow = true;
-                    // mesh.castShadow = true;
+
                     scene.add(mesh);
                 });
 
@@ -1833,7 +1735,6 @@
             (gltf) => {
                 gltf.scene.traverse((child) => {
                     if (child.isMesh && !stalkMesh) {
-                        // console.log("Found stalk geometry:", child.geometry);
                         stalkMesh = child.clone();
                         stalkMesh.scale.set(1, 1, 1);
                         isStalkLoaded = true;
@@ -1849,9 +1750,8 @@
         loader.load("../assets/roots_c1.glb", (gltf) => {
             gltf.scene.traverse((child) => {
                 if (child.isMesh && !rootMesh) {
-                    // console.log("Found root geometry:", child.geometry);
                     rootMesh = child.clone();
-                    // rootMesh.geometry.rotateY(Math.PI / 2);
+
                     rootMesh.scale.set(1, 1, 1);
                     isRootLoaded = true;
                 }
@@ -1863,7 +1763,6 @@
             (gltf) => {
                 gltf.scene.traverse((child) => {
                     if (child.isMesh && !branchMesh) {
-                        // console.log("Found branch geometry:", child.geometry);
                         branchMesh = child.clone();
                         branchMesh.scale.set(1, 1, 1);
                         isBranchLoaded = true;
@@ -1900,7 +1799,7 @@
                 if (child.isMesh) {
                     let mesh = child.clone();
                     adjustLeafMesh(mesh);
-                    // leafMeshes.push({ 0: mesh });
+
                     leafMeshes[0] = mesh;
                 }
             });
@@ -1911,7 +1810,7 @@
                 if (child.isMesh) {
                     let mesh = child.clone();
                     adjustLeafMesh(mesh);
-                    // leafMeshes.push({ 1: mesh });
+
                     leafMeshes[1] = mesh;
                 }
             });
@@ -1922,7 +1821,7 @@
                 if (child.isMesh) {
                     let mesh = child.clone();
                     adjustLeafMesh(mesh);
-                    // leafMeshes.push({ 2: mesh });
+
                     leafMeshes[2] = mesh;
                 }
             });
@@ -1933,7 +1832,7 @@
                 if (child.isMesh) {
                     let mesh = child.clone();
                     adjustLeafMesh(mesh);
-                    // leafMeshes.push({ 3: mesh });
+
                     leafMeshes[3] = mesh;
                 }
             });
@@ -1944,7 +1843,7 @@
                 if (child.isMesh) {
                     let mesh = child.clone();
                     adjustLeafMesh(mesh);
-                    // leafMeshes.push({ 4: mesh });
+
                     leafMeshes[4] = mesh;
                 }
             });
@@ -1955,7 +1854,7 @@
                 if (child.isMesh) {
                     let mesh = child.clone();
                     adjustLeafMesh(mesh);
-                    // leafMeshes.push({ 5: mesh });
+
                     leafMeshes[5] = mesh;
                 }
             });
@@ -1966,7 +1865,7 @@
                 if (child.isMesh) {
                     let mesh = child.clone();
                     adjustLeafMesh(mesh);
-                    // leafMeshes.push({ 6: mesh });
+
                     leafMeshes[6] = mesh;
                 }
             });
@@ -1984,20 +1883,20 @@
                         // if wave is alive
                         const timeSince = time / 1000 - clicksData[i];
                         if (timeSince > 5) {
-                            clicksData[i + 1] = 0; // deactivate wave
+                            clicksData[i + 1] = 0;
                         }
                     }
                 }
             }
         };
         // camera setup
-        let currentRadius = 15; // Start with 15 units radius
+        let currentRadius = 15;
 
         // Set initial camera position
         camera.position.x = 20;
         camera.position.z = 0;
         camera.position.y = -5.5;
-        // controls.target(0, -3.5, 0);
+
         controls.target = new THREE.Vector3(0, -3.5, 0);
 
         function animateCameraForStalk() {
@@ -2061,7 +1960,6 @@
             }
         }
 
-        // const leafGeometry = new THREE.CircleGeometry(0.15, 32);
         const nodeGeometry = new THREE.SphereGeometry(0.045);
 
         const nodeColors = {
@@ -2165,11 +2063,9 @@
             const beatDuration = MS_PER_MINUTE / currBPM.value;
             const pulseProgress = ((currentTime - animationStartTime) % beatDuration) / beatDuration;
 
-            // Sine wave for smooth pulsing
             const pulseScale = Math.sin(pulseProgress * Math.PI) * 1.0;
             innerSphere.scale.setScalar(pulseScale);
 
-            // Check if we just hit peak scale (approximately 1.0)
             if (pulseScale > 0.99 && lastPulseScale <= 0.99) {
                 emitNote();
             }
@@ -2232,8 +2128,6 @@
                 clicksData[slotIndex + 3] = 0;
                 window.waterShader.uniforms.clicks.value = clicksData;
             }
-
-            // updateLights();
         }
 
         function updateNotes() {
@@ -2243,14 +2137,13 @@
                 const elapsed = currentTime - note.startTime;
                 const progress = Math.min(elapsed / note.duration, 1);
 
-                // Use easeInOut for smoother movement
                 const easedProgress = easeInOutCubic(progress);
 
                 // Move towards target
                 note.mesh.position.lerpVectors(note.startPosition, note.targetPosition, easedProgress);
 
                 // Fade out near the end of travel
-                const fadeStartProgress = 0.8; // Start fading at 80% of journey
+                const fadeStartProgress = 0.8;
                 if (progress > fadeStartProgress) {
                     const fadeProgress = (progress - fadeStartProgress) / (1 - fadeStartProgress);
                     note.mesh.material.opacity = note.startOpacity * (1 - fadeProgress);
@@ -2272,51 +2165,7 @@
                 }
             }
         }
-        function updateLights() {
-            lights.forEach((oldLight, index) => {
-                if (!oldLight) {
-                    return;
-                }
 
-                try {
-                    // Create new light
-                    const newLight = new THREE.PointLight(lightColours[Math.floor(Math.random() * lightColours.length)], intensities[Math.floor(Math.random() * intensities.length)], 1000, 1);
-
-                    // Copy position
-                    newLight.position.copy(oldLight.position);
-
-                    // Verify old light is in scene before removing
-                    if (bg_scene.children.includes(oldLight)) {
-                        bg_scene.remove(oldLight);
-                    }
-
-                    // Add new light
-                    bg_scene.add(newLight);
-
-                    // Update array reference
-                    lights[index] = newLight;
-
-                    // Animate
-                    gsap.to(newLight.position, {
-                        x: oldLight.position.x,
-                        y: oldLight.position.y,
-                        z: oldLight.position.z,
-                        duration: 1,
-                        ease: "power2.inOut",
-                    });
-
-                    gsap.to(newLight, {
-                        intensity: intensities[Math.floor(Math.random() * intensities.length)],
-                        duration: 1,
-                        ease: "power2.inOut",
-                    });
-                } catch (error) {
-                    console.error(`Error updating light ${index}:`, error);
-                }
-            });
-        }
-
-        // Add this easing function
         function easeInOutCubic(x) {
             return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
         }
@@ -2325,7 +2174,7 @@
             // Calculate direction vector from parent to current
             const direction = new THREE.Vector3(current.x - parent.x, current.y - parent.y, current.z - parent.z);
 
-            // Calculate the final distance between points - this will be our target scale
+            // Calculate the final distance between points
             const distance = direction.length();
 
             // Position stays at parent point
@@ -2386,14 +2235,13 @@
             const position = new THREE.Vector3(current.x, current.y, current.z);
             const quaternion = new THREE.Quaternion();
 
-            // Since the model is along X axis, we start with a vector pointing along X
             const modelDirection = new THREE.Vector3(1, 0, 0);
 
             // Get the horizontal component of the growth direction
             const horizontalDirection = new THREE.Vector3(
                 current.directionVector.x,
-                // 0, // Zero out the Y component to keep leaves level
-                Math.random() * 0.5 - 0.25, // Add slight random variation to Y,
+
+                Math.random() * 0.5 - 0.25,
                 current.directionVector.z,
             ).normalize();
 
@@ -2437,7 +2285,7 @@
             const quaternion = new THREE.Quaternion();
 
             // Use parent's direction vector to determine flower orientation
-            // Since flower model faces up (Y-axis), start with up vector
+
             const modelDirection = new THREE.Vector3(0, 1, 0);
 
             // Get parent's growth direction
@@ -2461,7 +2309,7 @@
             return {
                 position: position,
                 rotation: quaternion,
-                scale: new THREE.Vector3(0.2, 0.2, 0.2), // Adjust scale as needed
+                scale: new THREE.Vector3(0.2, 0.2, 0.2),
             };
         }
 
@@ -2483,7 +2331,6 @@
                     targetY = parentNode.y + parentNode.directionVector.y * growthDistance;
                     targetZ = parentNode.z + parentNode.directionVector.z * growthDistance;
 
-                    // Add slight random variation
                     const variance = 0.1;
                     targetX += (Math.random() - 0.5) * variance;
                     targetY += (Math.random() - 0.5) * variance;
@@ -2510,7 +2357,6 @@
                         const forkDirection = firstFork;
                         firstFork = firstFork * -1;
 
-                        // Blend the forking direction with emitter influence
                         const forkAngle = Math.atan2(forkDirection, -forkDirection);
 
                         targetX = parentNode.x + Math.cos(forkAngle);
@@ -2851,7 +2697,6 @@
                 const sortedNotes = [...detectedNotes.value].sort((a, b) => a.energy - b.energy);
                 const midIndex = Math.floor(sortedNotes.length / 2);
                 currentNote = sortedNotes[midIndex].name;
-                // console.log("Median note:", currentNote);
             }
 
             let nodeMesh;
@@ -2967,7 +2812,7 @@
 
             if (isCompleted && !cameraMoved) {
                 cameraMoved = true;
-                // controls.target = new THREE.Vector3(0, 0, 0);
+
                 gsap.to(controls.target, {
                     x: 0,
                     y: lastStalkHeight * 1.5 * 0.5,
@@ -3085,7 +2930,6 @@
     const storage = getStorage(app);
     const db = getFirestore(app);
 
-    // Function to get and increment counter
     async function getNextId() {
         const counterRef = doc(db, "counters", "plants");
 
@@ -3114,15 +2958,12 @@
     // Function to upload file and store reference
     async function uploadPlantToCloud(buffer, filename) {
         try {
-            // 1. Get next ID
             const plantId = await getNextId();
 
-            // 2. Upload file to storage
             const fileRef = storageRef(storage, `plants/${filename}`);
             const blob = new Blob([buffer], { type: "application/octet-stream" });
             const snapshot = await uploadBytes(fileRef, blob);
 
-            // 3. Store reference in Firestore
             const plantRef = doc(db, "plants", plantId.toString());
             await setDoc(plantRef, {
                 id: plantId,
@@ -3145,13 +2986,11 @@
         }
     }
 
-    // Material handling utilities
     function cloneMaterialForExport(material) {
         if (!material) return null;
 
         const clonedMaterial = material.clone();
 
-        // Preserve essential material properties
         const propertiesToPreserve = ["color", "map", "normalMap", "roughnessMap", "metalnessMap", "emissiveMap", "aoMap", "transparent", "opacity", "roughness", "metalness", "side", "envMapIntensity"];
 
         propertiesToPreserve.forEach((prop) => {
@@ -3160,7 +2999,6 @@
             }
         });
 
-        // Ensure material type is preserved
         clonedMaterial.type = material.type;
 
         return clonedMaterial;
@@ -3172,16 +3010,13 @@
 
         scene.traverse((node) => {
             if (node.isMesh && node.material) {
-                // Handle single material
                 if (!Array.isArray(node.material)) {
                     if (!materialCache.has(node.material)) {
                         const clonedMaterial = cloneMaterialForExport(node.material);
                         materialCache.set(node.material, clonedMaterial);
                     }
                     node.material = materialCache.get(node.material);
-                }
-                // Handle material array
-                else {
+                } else {
                     node.material = node.material.map((mat) => {
                         if (!materialCache.has(mat)) {
                             const clonedMaterial = cloneMaterialForExport(mat);
@@ -3196,16 +3031,13 @@
         return materialMap;
     }
 
-    // Enhanced export preparation
     function prepareSceneForExport(scene) {
-        // Define meshes to exclude
         // const excludeMeshNames = ["display-case", "water-surface", "water-volume", "music-emitter-inner", "music-emitter-outer"];
         const excludeMeshNames = ["music-emitter-inner", "music-emitter-outer"];
 
         const exportScene = scene.clone(true);
         const objectsToRemove = [];
 
-        // First pass: identify objects to remove
         exportScene.traverse((object) => {
             const shouldExclude = object.userData.isUI || object.isHelper || (object.type === "Line" && object.userData.isHelper) || excludeMeshNames.includes(object.name);
 
@@ -3214,7 +3046,6 @@
             }
         });
 
-        // Second pass: remove identified objects
         objectsToRemove.forEach((object) => {
             if (object.parent) {
                 object.parent.remove(object);
@@ -3235,18 +3066,14 @@
             }
         });
 
-        // Handle materials for remaining objects
         createMaterialMap(exportScene);
 
-        // Ensure TRS compatibility for remaining objects
         exportScene.traverse((node) => {
             if (node.isObject3D) {
-                // Store current world position
                 const worldPosition = node.getWorldPosition(new THREE.Vector3());
                 const worldQuaternion = node.getWorldQuaternion(new THREE.Quaternion());
                 const worldScale = node.getWorldScale(new THREE.Vector3());
 
-                // Reset matrix but maintain world position
                 node.position.copy(worldPosition);
                 node.quaternion.copy(worldQuaternion);
                 node.scale.copy(worldScale);
@@ -3256,7 +3083,6 @@
             }
         });
 
-        // Add some debug logging
         console.log("Export scene preparation complete:");
         console.log(`- Removed ${objectsToRemove.length} objects`);
         let remainingCount = 0;
@@ -3266,7 +3092,6 @@
         return exportScene;
     }
 
-    // Enhanced save function
     async function savePlantToCloud(scene, fileName) {
         if (!scene) {
             throw new Error("Scene not initialized");
@@ -3321,7 +3146,6 @@
         });
     }
 
-    // Usage in save click handler
     async function onSaveClick() {
         if (!scene) {
             console.error("Scene not initialized");
@@ -3347,17 +3171,15 @@
     }
 
     function onViewClick() {
-        // Open display page in new tab
         socket.value.emit("viewPlant", {
             roomId: props.id,
             plantId: props.id,
         });
         window.open(`/display/${props.id}`, "_blank");
-        // Redirect current page to home
+
         window.location.href = "/";
     }
 
-    // Lifecycle hooks
     onMounted(() => {
         initBG();
         prelimInit();
@@ -3400,8 +3222,4 @@
     .growth-scene {
         backdrop-filter: blur(1px);
     }
-
-    /* button {
-        @apply hover:border-white border-b-2 border-transparent p-2 text-3xl text-white font-code uppercase;
-    } */
 </style>

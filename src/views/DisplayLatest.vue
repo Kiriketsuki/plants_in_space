@@ -28,7 +28,6 @@
 
     async function findLatestPlant() {
         try {
-            // Query the plants collection, ordered by ID in descending order, limit to 1
             const q = query(collection(db, "plants"), orderBy("id", "desc"), limit(1));
 
             const querySnapshot = await getDocs(q);
@@ -39,11 +38,9 @@
                 return;
             }
 
-            // Get the ID of the latest plant
             const latestPlant = querySnapshot.docs[0];
             const originalFilename = latestPlant.data().storageLink.split("/").pop().replace(".glb", "");
 
-            // Redirect to the display route with this ID
             router.push(`/display/${originalFilename}`);
         } catch (err) {
             console.error("Error finding latest plant:", err);

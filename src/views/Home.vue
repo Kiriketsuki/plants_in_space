@@ -41,7 +41,6 @@
         pointerMoveListener = (event) => {
             const { clientX, clientY } = event;
 
-            // Blob animation
             blobElement?.animate(
                 {
                     left: `${clientX}px`,
@@ -50,15 +49,12 @@
                 { duration: 200, fill: "forwards" },
             );
 
-            // Randomly decide whether to create a star (1 in 3 chance)
             if (Math.random() < 0.01) {
-                // Create star element
                 const star = document.createElement("img");
 
-                // Randomly choose between star images
                 star.src = Math.random() < 0.5 ? "../assets/star.PNG" : "../assets/star2.PNG";
                 const randomSize = Math.random() * 4 + 1;
-                // Set styles
+
                 star.style.cssText = `
                     position: fixed;
                     left: ${clientX}px;
@@ -72,10 +68,8 @@
                     transition: opacity 0.5s ease-out;
                 `;
 
-                // Add to document
                 document.body.appendChild(star);
 
-                // Fade out and remove after 3 seconds
                 setTimeout(() => {
                     star.style.opacity = "0";
                     setTimeout(() => {
