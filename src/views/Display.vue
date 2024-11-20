@@ -59,7 +59,7 @@
         <div
             v-if="isLoading"
             class="fixed inset-0 flex items-center justify-center bg-back bg-opacity-50 z-10">
-            <div class="text-white text-9xl capitalize font-code">{{ loadingText }}</div>
+            <div class="text-white text-5xl capitalize font-code">{{ loadingText }}</div>
         </div>
     </div>
 </template>

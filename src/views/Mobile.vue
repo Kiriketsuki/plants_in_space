@@ -335,7 +335,7 @@
 
     let debounceTimeout;
 
-    const CHUNK_SIZE = 16384; 
+    const CHUNK_SIZE = 16384;
 
     let socket;
 
@@ -350,9 +350,8 @@
 
     // Socket Functions
     function initializeSocket() {
-        
         const url = "https://plants-socket-24702956633.asia-southeast1.run.app";
-        
+
         connectionStatus.value = "Connecting";
 
         if (socket) {
@@ -410,7 +409,7 @@
 
         socket.on("viewPlant", ({ plantId }) => {
             console.log("Viewing plant", plantId);
-            window.location.href = `/display/${props.id}`;
+            window.location.href = `/hologram/${props.id}`;
         });
 
         return socket;
@@ -635,7 +634,6 @@
                 if (!changeWasMade) break;
             }
         } else if (totalChange < 0) {
-            
             let remainingChange = Math.abs(totalChange);
             while (remainingChange > 0) {
                 let changeWasMade = false;
@@ -674,7 +672,6 @@
 
     async function getSongTempo(songName) {
         try {
-            
             const authResponse = await fetch("https://accounts.spotify.com/api/token", {
                 method: "POST",
                 headers: {
@@ -690,9 +687,7 @@
 
             const authData = await authResponse.json();
             const accessToken = authData.access_token;
-            
 
-            
             const searchResponse = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(songName)}&type=track&limit=1`, {
                 headers: {
                     Authorization: `Bearer ${accessToken}`,
@@ -711,7 +706,6 @@
 
             const trackId = searchData.tracks.items[0].id;
 
-            
             const featuresResponse = await fetch(`https://api.spotify.com/v1/audio-features/${trackId}`, {
                 headers: {
                     Authorization: `Bearer ${accessToken}`,
@@ -740,8 +734,6 @@
         initializeDistributions(remainingSongs);
     }
 
-    
-    
     async function startGrowth() {
         if (!socket || !socket.connected) {
             error.value = "Not connected to server. Please try reconnecting.";
@@ -755,18 +747,15 @@
         }
 
         try {
-            
             const localFiles = selectedSongs.value.filter((song) => song.file);
             const spotifyTracks = selectedSongs.value.filter((song) => song.spotifyId);
 
-            
             for (const song of localFiles) {
                 if (!song.uploaded) {
                     await uploadSongFile(song);
                 }
             }
 
-            
             const songData = selectedSongs.value.map((song) => ({
                 id: song.id,
                 name: song.name,
@@ -779,7 +768,6 @@
                 }),
             }));
 
-            
             const categorizedSongs = {
                 localFiles: songData.filter((song) => !song.spotifyTrack),
                 spotifyTracks: songData.filter((song) => song.spotifyTrack),
@@ -877,15 +865,13 @@
 
         let normalizedValue;
         if (gamma < -90) {
-            normalizedValue = 0; 
+            normalizedValue = 0;
         } else if (gamma > 90) {
-            normalizedValue = 100; 
+            normalizedValue = 100;
         } else {
-            
             normalizedValue = ((gamma + 90) / 180) * 100;
         }
 
-        
         if (Math.abs(musicDirection.value - normalizedValue) > 1) {
             musicDirection.value = Math.round(normalizedValue);
             updateMusicDirection();
@@ -941,7 +927,6 @@
 </script>
 
 <style scoped>
-
     input[type="range"] {
         @apply bg-gray-600;
         height: 4px;
@@ -966,14 +951,12 @@
         cursor: pointer;
     }
 
-    
     input[type="number"]::-webkit-outer-spin-button,
     input[type="number"]::-webkit-inner-spin-button {
         -webkit-appearance: none;
         margin: 0;
     }
 
-    
     input[type="number"] {
         -moz-appearance: textfield;
     }

@@ -9,7 +9,7 @@
     <div
         v-else
         class="fixed inset-0 flex items-center justify-center bg-back">
-        <div class="text-white text-9xl capitalize font-code">Finding The Latest Plant</div>
+        <div class="text-white text-5xl capitalize font-code">Finding The Latest Plant</div>
     </div>
 </template>
 
