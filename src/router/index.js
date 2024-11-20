@@ -12,6 +12,8 @@ const Desktop = () => import("../views/Desktop.vue");
 const Mobile = () => import("../views/Mobile.vue");
 const Display = () => import("../views/Display.vue");
 const DisplayLatest = () => import("../views/DisplayLatest.vue");
+const Hologram = () => import("../views/Hologram.vue");
+const HologramLatest = () => import("../views/HologramLatest.vue");
 const Visual = () => import("../views/Visual.vue");
 const ForestDisplay = () => import("../views/ForestDisplay.vue");
 const About = () => import("../views/About.vue");
@@ -86,6 +88,11 @@ const routes = [
         },
     },
     {
+        path: "/display",
+        name: "display-redirect",
+        redirect: "/latest",
+    },
+    {
         path: "/display/:id",
         name: "display",
         component: Display,
@@ -98,6 +105,25 @@ const routes = [
         path: "/latest",
         name: "latest",
         component: DisplayLatest,
+    },
+    {
+        path: "/hologram",
+        name: "hologram-redirect",
+        redirect: "/hologram-latest",
+    },
+    {
+        path: "/hologram/:id",
+        name: "hologram",
+        component: Hologram,
+        props: true,
+        meta: {
+            title: "Hologram",
+        },
+    },
+    {
+        path: "/hologram-latest",
+        name: "hologram-latest",
+        component: HologramLatest,
     },
     {
         path: "/visual",
