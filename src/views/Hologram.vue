@@ -18,7 +18,7 @@
         <div class="growth-scene h-screen w-screen fixed top-0 left-0 z-0">
             <button
                 @click="toggleFullscreen"
-                class="fixed top-4 right-4 z-20 p-2 bg-black bg-opacity-50 rounded-full hover:bg-opacity-75 transition-colors">
+                class="fixed top-4 right-4 z-20 p-2 bg-opacity-50 rounded-full hover:bg-opacity-75 transition-colors">
                 <svg
                     v-if="!isFullscreen"
                     xmlns="http://www.w3.org/2000/svg"

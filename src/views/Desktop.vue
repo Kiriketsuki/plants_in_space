@@ -1,7 +1,7 @@
 <template>
     <div class="h-screen w-screen absolute top-0 left-0 overflow-x-hidden overflow-y-hidden bg-back p-4 main z-10">
         <!-- Connection Status -->
-        <div class="absolute top-4 right-4 z-50">
+        <div class="absolute top-4 left-4 z-50">
             <div class="p-3 bg-less rounded text-sm text-white space-y-1">
                 <p>
                     Status:
@@ -132,7 +132,36 @@
             </div>
         </div>
     </div>
-
+    <button
+        @click="toggleFullscreen"
+        class="fixed top-4 right-4 z-20 p-2 bg-opacity-50 rounded-full hover:bg-opacity-75 transition-colors">
+        <svg
+            v-if="!isFullscreen"
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-6 w-6 text-white"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+        </svg>
+        <svg
+            v-else
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-6 w-6 text-white"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 4l5 5m11-5l-5 5m5 11l-5-5m-11 5l5-5" />
+        </svg>
+    </button>
     <div
         ref="bg"
         class="h-screen w-screen fixed top-0 left-0 -z-1"></div>
@@ -384,6 +413,26 @@
     let flowerMesh = null;
 
     let isCompleted = false;
+
+    const isFullscreen = ref(false);
+
+    // Add fullscreen toggle function
+    function toggleFullscreen() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen();
+            isFullscreen.value = true;
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+                isFullscreen.value = false;
+            }
+        }
+    }
+
+    // Update fullscreen state when it changes
+    function onFullscreenChange() {
+        isFullscreen.value = !!document.fullscreenElement;
+    }
 
     // Firebase
     const isUploading = ref(false);
@@ -3185,6 +3234,7 @@
         prelimInit();
         resetState();
         socket.value = initializeSocket();
+        document.addEventListener("fullscreenchange", onFullscreenChange);
     });
 
     onUnmounted(() => {
@@ -3195,7 +3245,7 @@
         if (audioContext.value) {
             audioContext.value.close();
         }
-    });
+        document.removeEventListener("fullscreenchange", onFullscreenChange);    });
 
     window.addEventListener("resize", onWindowResize, false);
     function onWindowResize() {
