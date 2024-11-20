@@ -13,7 +13,7 @@
                 alt="" />
         </div>
 
-        <div class="main-content flex flex-col items-center justify-start z-0 w-screen h-screen gap-20 pt-[13vh]">
+        <div class="main-content flex flex-col items-center justify-start z-0 w-screen h-screen gap-20 pt-[15vh]">
             <div class="headers flex flex-col gap-5">
                 <h1
                     class="text-white font-instr text-5xl cursor-pointer"
@@ -22,7 +22,7 @@
                 </h1>
                 <h2 class="text-white font-instr italic text-9xl select-none">about.</h2>
             </div>
-            <p class="text-white font-code text-2xl text-center w-[59vw]">
+            <p class="text-white font-code text-4xl text-center w-[55vw]">
                 In a future where Earth faces extreme overpopulation, the challenge of sustainable food production has grown more pressing than ever. We try to envision a new approach to growing
                 <span class="space"
                     ><span class="space-star">
@@ -89,7 +89,8 @@
                             </defs>
                             <path d="M512 255.1c0 11.34-7.406 20.86-18.44 23.64l-171.3 42.78l-42.78 171.1C276.7 504.6 267.2 512 255.9 512s-20.84-7.406-23.62-18.44l-42.66-171.2L18.47 279.6C7.406 276.8 0 267.3 0 255.1c0-11.34 7.406-20.83 18.44-23.61l171.2-42.78l42.78-171.1C235.2 7.406 244.7 0 256 0s20.84 7.406 23.62 18.44l42.78 171.2l171.2 42.78C504.6 235.2 512 244.6 512 255.1z" /></svg></span
                     ><span class="space-text">plants in space</span> </span
-                >, where music becomes an essential part of their environment, much like how sound can influence the development of a baby in the womb. By playing various types of music, we explore how sound could theoretically impact the growth, structure, and resilience of various plants, adapting them to the
+                >, where music becomes an essential part of their environment, much like how sound can influence the development of a baby in the womb. <br /><br />
+                By playing various types of music, we explore how sound could theoretically impact the growth, structure, and resilience of various plants, adapting them to the
                 <span class="space"
                     ><span class="space-star">
                         <svg viewBox="0 0 512 512">

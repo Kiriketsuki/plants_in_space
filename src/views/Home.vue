@@ -1,5 +1,5 @@
 <template>
-    <div class="w-screen h-screen flex flex-col items-center justify-center">
+    <div class="w-screen h-screen flex flex-col items-center justify-center overflow-hidden">
         <div class="bg w-full h-full fixed left-0 top-0 -z-2 bg-back">
             <img
                 src="../assets/testbg.png"
@@ -35,30 +35,48 @@
     let blobElement = null;
     let pointerMoveListener = null;
 
+    const constrainPosition = (x, y, element) => {
+        const blobSize = element.offsetWidth;
+        const padding = 20; // Buffer from window edges
+        
+        return {
+            x: Math.min(Math.max(x, blobSize/2 + padding), window.innerWidth - blobSize/2 - padding),
+            y: Math.min(Math.max(y, blobSize/2 + padding), window.innerHeight - blobSize/2 - padding)
+        };
+    };
+
     onMounted(() => {
         blobElement = document.getElementById("blob");
 
         pointerMoveListener = (event) => {
             const { clientX, clientY } = event;
 
-            blobElement?.animate(
-                {
-                    left: `${clientX}px`,
-                    top: `${clientY}px`,
-                },
-                { duration: 200, fill: "forwards" },
-            );
+            if (blobElement) {
+                const { x, y } = constrainPosition(clientX, clientY, blobElement);
+
+                blobElement.animate(
+                    {
+                        left: `${x}px`,
+                        top: `${y}px`,
+                    },
+                    { duration: 200, fill: "forwards" },
+                );
+            }
 
             if (Math.random() < 0.01) {
                 const star = document.createElement("img");
-
                 star.src = Math.random() < 0.5 ? "../assets/star.PNG" : "../assets/star2.PNG";
                 const randomSize = Math.random() * 4 + 1;
+                
+                const maxX = window.innerWidth - (randomSize * window.innerWidth / 100);
+                const maxY = window.innerHeight - (randomSize * window.innerWidth / 100);
+                const x = Math.min(Math.max(clientX, 0), maxX);
+                const y = Math.min(Math.max(clientY, 0), maxY);
 
                 star.style.cssText = `
                     position: fixed;
-                    left: ${clientX}px;
-                    top: ${clientY}px;
+                    left: ${x}px;
+                    top: ${y}px;
                     width: ${randomSize}vw;
                     height: ${randomSize}vw;
                     pointer-events: none;
@@ -125,7 +143,7 @@
         background-color: white;
         height: 5vmax;
         aspect-ratio: 1;
-        position: absolute;
+        position: fixed;
         left: 50%;
         top: 50%;
         translate: -50% -50%;
