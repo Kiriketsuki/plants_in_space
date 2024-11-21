@@ -1029,6 +1029,10 @@
         }
     };
 
+    // Add these state variables near the top with other refs
+    const analyzerNodes = ref(new Map());
+    const currentAnalyzer = ref(null);
+
     async function playAudioBuffer(audioBuffer, duration) {
         try {
             if (!audioContext.value) {
@@ -1045,6 +1049,10 @@
             analyzer.fftSize = 2048;
             const bufferLength = analyzer.frequencyBinCount;
             const dataArray = new Uint8Array(bufferLength);
+
+            // Store analyzer reference
+            currentAnalyzer.value = analyzer;
+            analyzerNodes.value.set(source, analyzer);
 
             // Create gain nodes
             leftGainNode.value = audioContext.value.createGain();
@@ -1087,10 +1095,14 @@
             function analyzeAudio() {
                 if (!isPlaying.value) return;
 
-                analyzer.getByteFrequencyData(dataArray);
+                // Get the current analyzer for this source
+                const currentAnalyzer = analyzerNodes.value.get(source);
+                if (!currentAnalyzer) return;
+
+                currentAnalyzer.getByteFrequencyData(dataArray);
 
                 // Find significant frequencies with energy levels
-                const frequencyResolution = audioContext.value.sampleRate / analyzer.fftSize;
+                const frequencyResolution = audioContext.value.sampleRate / currentAnalyzer.fftSize;
                 const significantFreqs = [];
 
                 for (let i = 0; i < dataArray.length; i++) {
@@ -1123,11 +1135,15 @@
             }
 
             analyzeAudio();
-
             updateChannelVolumes();
 
             source.loop = true;
             source.start(0);
+
+            // Clean up old analyzer when source ends
+            source.onended = () => {
+                analyzerNodes.value.delete(source);
+            };
 
             return {
                 source,
@@ -3245,7 +3261,8 @@
         if (audioContext.value) {
             audioContext.value.close();
         }
-        document.removeEventListener("fullscreenchange", onFullscreenChange);    });
+        document.removeEventListener("fullscreenchange", onFullscreenChange);
+    });
 
     window.addEventListener("resize", onWindowResize, false);
     function onWindowResize() {

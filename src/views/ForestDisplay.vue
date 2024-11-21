@@ -26,10 +26,41 @@
             </canvas>
         </div>
 
+        <button
+            @click="toggleFullscreen"
+            class="fixed top-4 right-4 z-20 p-2 bg-opacity-50 rounded-full hover:bg-opacity-75 transition-colors">
+            <svg
+                v-if="!isFullscreen"
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-6 w-6 text-white"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+            <svg
+                v-else
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-6 w-6 text-white"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M4 4l5 5m11-5l-5 5m5 11l-5-5m-11 5l5-5" />
+            </svg>
+        </button>
+
         <div
             v-if="isLoading"
             class="fixed inset-0 flex items-center justify-center bg-transparent bg-opacity-50 z-10">
-            <div class="text-white text-9xl capitalize font-code">{{ loadingText }}</div>
+            <div class="text-white text-5xl capitalize font-code">{{ loadingText }}</div>
         </div>
     </div>
 </template>
@@ -53,6 +84,26 @@
     const loadingText = ref("Loading models");
     const loadingOpacity = ref(0);
     let loadingInterval = null;
+
+    const isFullscreen = ref(false);
+
+    // Add fullscreen toggle function
+    function toggleFullscreen() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen();
+            isFullscreen.value = true;
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+                isFullscreen.value = false;
+            }
+        }
+    }
+
+    // Update fullscreen state when it changes
+    function onFullscreenChange() {
+        isFullscreen.value = !!document.fullscreenElement;
+    }
 
     function createLoadingAnimation() {
         gsap.to(loadingOpacity, {
@@ -284,18 +335,39 @@
         controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.target.set(1, -9, 32);
-        controls.addEventListener("change", () => {
-            console.log("Camera Position:", {
-                x: camera.position.x.toFixed(2),
-                y: camera.position.y.toFixed(2),
-                z: camera.position.z.toFixed(2),
-                target: {
-                    x: controls.target.x.toFixed(2),
-                    y: controls.target.y.toFixed(2),
-                    z: controls.target.z.toFixed(2),
-                },
-            });
+
+        // Add auto-rotation
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 1.0;
+
+        // Add event listeners for user interaction
+        controls.addEventListener("start", () => {
+            // User started interacting
+            controls.autoRotate = false;
         });
+
+        // Listen for key events
+        renderer.domElement.addEventListener("keydown", () => {
+            controls.autoRotate = false;
+        });
+
+        // Listen for wheel events
+        renderer.domElement.addEventListener("wheel", () => {
+            controls.autoRotate = false;
+        });
+
+        // controls.addEventListener("change", () => {
+        //     console.log("Camera Position:", {
+        //         x: camera.position.x.toFixed(2),
+        //         y: camera.position.y.toFixed(2),
+        //         z: camera.position.z.toFixed(2),
+        //         target: {
+        //             x: controls.target.x.toFixed(2),
+        //             y: controls.target.y.toFixed(2),
+        //             z: controls.target.z.toFixed(2),
+        //         },
+        //     });
+        // });
 
         const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
         directionalLight.castShadow = true;
@@ -411,11 +483,20 @@
         animate();
 
         window.addEventListener("resize", onWindowResize);
+        document.addEventListener("fullscreenchange", onFullscreenChange);
     });
 
     onUnmounted(() => {
         cleanupLoadingAnimation();
         window.removeEventListener("resize", onWindowResize);
+
+        renderer?.domElement.removeEventListener("keydown", () => {
+            controls.autoRotate = false;
+        });
+
+        renderer?.domElement.removeEventListener("wheel", () => {
+            controls.autoRotate = false;
+        });
 
         scene?.traverse((object) => {
             if (object.geometry) {
@@ -429,6 +510,7 @@
                 }
             }
         });
+        document.removeEventListener("fullscreenchange", onFullscreenChange);
 
         renderer?.dispose();
         controls?.dispose();

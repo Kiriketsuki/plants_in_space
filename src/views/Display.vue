@@ -311,6 +311,26 @@
         controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
 
+        // Add auto-rotation
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 1.0;
+
+        // Add event listeners for user interaction
+        controls.addEventListener("start", () => {
+            // User started interacting
+            controls.autoRotate = false;
+        });
+
+        // Listen for key events
+        renderer.domElement.addEventListener("keydown", () => {
+            controls.autoRotate = false;
+        });
+
+        // Listen for wheel events
+        renderer.domElement.addEventListener("wheel", () => {
+            controls.autoRotate = false;
+        });
+
         const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
         directionalLight.position.set(5, 5, 5);
         scene.add(directionalLight);
@@ -423,6 +443,14 @@
     onUnmounted(() => {
         cleanupLoadingAnimation();
         window.removeEventListener("resize", onWindowResize);
+
+        renderer?.domElement.removeEventListener("keydown", () => {
+            controls.autoRotate = false;
+        });
+
+        renderer?.domElement.removeEventListener("wheel", () => {
+            controls.autoRotate = false;
+        });
 
         scene?.traverse((object) => {
             if (object.geometry) {
